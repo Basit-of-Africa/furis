@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Check configuration
         id: cfg
+        # Runs before checkout, so not inside backend/ (it doesn't exist yet).
+        working-directory: .
         run: |
           if [ -z "$FURIS_DATABASE_URL" ]; then
             echo "NEON_DATABASE_URL secret is not set; nothing to do."
