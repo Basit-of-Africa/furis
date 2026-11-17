@@ -115,3 +115,12 @@ def test_dev_sign_in_refused_on_vercel(monkeypatch):
     monkeypatch.setenv("VERCEL", "1")
     with pytest.raises(ConfigError):
         validate_auth_settings(Settings(database_url="sqlite://"))  # environment left at default
+
+
+def test_health_reports_database_and_schema():
+    from fastapi.testclient import TestClient
+
+    from furis.main import app
+
+    body = TestClient(app).get("/health").json()
+    assert body["status"] == "ok" and body["database"] in ("ok", "unreachable") and "schema" in body

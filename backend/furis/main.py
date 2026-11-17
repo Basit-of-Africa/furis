@@ -27,7 +27,22 @@ app.include_router(verification.dup_router)
 
 @app.get("/health", tags=["system"])
 def health():
-    return {"status": "ok"}
+    """Liveness plus a database check: 'database' is ok/unreachable, 'schema' is the
+    applied migration (null when the tables have not been created yet)."""
+    from sqlalchemy import text
+
+    from furis.db import engine
+
+    out = {"status": "ok", "database": "ok", "schema": None}
+    try:
+        with engine.connect() as conn:
+            try:
+                out["schema"] = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+            except Exception:
+                out["schema"] = None  # alembic_version missing: migrations not run
+    except Exception:
+        out["database"] = "unreachable"
+    return out
 
 
 @app.get("/me", response_model=Me, tags=["system"])
