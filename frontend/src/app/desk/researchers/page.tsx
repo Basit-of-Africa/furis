@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { createDepartment, createFaculty, createResearcher, importStaff } from "@/app/actions";
+import { createDepartment, createFaculty, createResearcher, importStaff, startDiscoveryAll } from "@/app/actions";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { apiGet, getMe, qs } from "@/lib/api";
 import { isAdmin, researcherName } from "@/lib/format";
@@ -31,6 +31,11 @@ export default async function ResearchersPage({ searchParams }: { searchParams: 
           <h1>Researchers</h1>
           <p>The institutional researcher registry. Discovery searches each researcher&apos;s confirmed names and verified identifiers.</p>
         </div>
+        {admin && researchers.length > 0 && (
+          <ActionForm action={startDiscoveryAll} keepMessage>
+            <SubmitButton>Run discovery for all researchers</SubmitButton>
+          </ActionForm>
+        )}
       </div>
 
       <form className="filters" method="get">

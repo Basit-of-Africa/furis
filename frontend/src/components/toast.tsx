@@ -10,7 +10,8 @@ export function Toaster({ children }: { children: React.ReactNode }) {
   const show = useCallback((text: string) => setMsg((m) => ({ text, n: (m?.n ?? 0) + 1 })), []);
   useEffect(() => {
     if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 5000);
+    // Long messages stay up long enough to read.
+    const t = setTimeout(() => setMsg(null), Math.min(15000, Math.max(5000, msg.text.length * 70)));
     return () => clearTimeout(t);
   }, [msg]);
   return (

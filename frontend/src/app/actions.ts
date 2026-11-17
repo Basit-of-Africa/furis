@@ -287,6 +287,15 @@ export async function addEmployment(_: ActionResult, fd: FormData): Promise<Acti
   );
 }
 
+export async function startDiscoveryAll(_: ActionResult, _fd: FormData): Promise<ActionResult> {
+  let message = "Discovery requested for all researchers.";
+  const r = await run(async () => {
+    const res = await apiSend<{ message?: string }>("POST", "/discovery/all");
+    if (res?.message) message = res.message;
+  }, "");
+  return r?.ok ? { ok: true, message } : r;
+}
+
 export async function startDiscovery(_: ActionResult, fd: FormData): Promise<ActionResult> {
   // The API says whether it started the run or queued it for the scheduled worker.
   let message = "Discovery requested.";

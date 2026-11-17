@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 from furis import schemas as s
 from furis.api.deps import audit, current_user, get_researcher_for, require_admin
 from furis.db import SessionLocal, get_db
+from furis.discovery.dispatch import dispatch_discovery
 from furis.discovery.engine import DiscoveryEngine
 from furis.config import Settings, discovery_mode, get_settings
-from furis.models import DiscoveryRequest, RequestStatus, SearchRun, User
+from furis.models import DiscoveryRequest, RequestStatus, Researcher, SearchRun, User
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 log = logging.getLogger(__name__)
@@ -28,6 +29,36 @@ def _run(researcher_id: uuid.UUID) -> None:
             log.exception("discovery job failed for %s", researcher_id)
 
 
+def _queued_message(started: bool, tail: str) -> str:
+    if started:
+        return f"Discovery has started and usually finishes within a few minutes. {tail}"
+    return (f"Discovery is queued for the next scheduled run (GitHub runs it hourly, sometimes later). {tail} "
+            "To start it immediately, set FURIS_GITHUB_TOKEN on the backend (see the README).")
+
+
+@router.post("/all", status_code=202)
+def start_discovery_all(tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(require_admin),
+                        settings: Settings = Depends(get_settings)):
+    """Queue discovery for every active researcher."""
+    ids = list(db.scalars(select(Researcher.id).where(Researcher.archived_at.is_(None))))
+    audit(db, user, "start_discovery_all", "researcher", "all", new={"count": len(ids)})
+    if discovery_mode(settings) != "queue":
+        db.commit()
+        for rid in ids:
+            tasks.add_task(_run, rid)
+        return {"status": "started", "count": len(ids),
+                "message": f"Discovery started for {len(ids)} researchers. Results appear as each finishes."}
+    busy = set(db.scalars(select(DiscoveryRequest.researcher_id).where(
+        DiscoveryRequest.status.in_([RequestStatus.PENDING, RequestStatus.RUNNING]))))
+    for rid in ids:
+        if rid not in busy:
+            db.add(DiscoveryRequest(researcher_id=rid, requested_by=user.id))
+    db.commit()
+    started = dispatch_discovery(settings)
+    return {"status": "queued", "count": len(ids), "dispatched": started,
+            "message": _queued_message(started, f"{len(ids)} researchers are included; results appear in the review queue.")}
+
+
 @router.post("/researchers/{researcher_id}", status_code=202)
 def start_discovery(researcher_id: uuid.UUID, tasks: BackgroundTasks, db: Session = Depends(get_db),
                     user: User = Depends(require_admin), settings: Settings = Depends(get_settings)):
@@ -40,8 +71,9 @@ def start_discovery(researcher_id: uuid.UUID, tasks: BackgroundTasks, db: Sessio
         if existing is None:
             db.add(DiscoveryRequest(researcher_id=r.id, requested_by=user.id))
         db.commit()
-        return {"status": "queued", "researcher_id": str(r.id),
-                "message": "Discovery is queued and will run within the hour. Search runs appear below when it finishes."}
+        started = dispatch_discovery(settings)
+        return {"status": "queued", "researcher_id": str(r.id), "dispatched": started,
+                "message": _queued_message(started, "Search runs appear below when it finishes.")}
     db.commit()
     tasks.add_task(_run, r.id)
     return {"status": "started", "researcher_id": str(r.id),

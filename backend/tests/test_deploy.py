@@ -85,7 +85,7 @@ def test_queue_mode_endpoint(Session, db, monkeypatch):
         h = {"X-User-Email": "ro@fuo.test"}
         for _ in range(2):  # a second click does not queue a duplicate
             res = c.post(f"/discovery/researchers/{r.id}", headers=h)
-            assert res.status_code == 202 and res.json()["status"] == "queued" and "within the hour" in res.json()["message"]
+            assert res.status_code == 202 and res.json()["status"] == "queued" and "next scheduled run" in res.json()["message"]
         assert len(db.scalars(select(DiscoveryRequest)).all()) == 1
         assert c.get("/discovery/requests/pending", params={"researcher_id": str(r.id)}, headers=h).json()["pending"]
     finally:
@@ -138,3 +138,47 @@ def test_clean_database_url():
         with pytest.raises(DatabaseUrlError) as e:
             clean_database_url(bad)
         assert "p@" not in str(e.value)  # never echoes the secret
+
+
+def test_dispatch_and_queue_all(Session, db, monkeypatch):
+    import httpx
+    import respx
+    from fastapi.testclient import TestClient
+
+    from furis.config import get_settings
+    from furis.db import get_db
+    from furis.main import app
+
+    db.add_all([Researcher(first_name="A", last_name="One"), Researcher(first_name="B", last_name="Two"),
+                User(email="ro@fuo.test", full_name="RO", role=UserRole.RESEARCH_OFFICE)])
+    db.commit()
+
+    def _db():
+        with Session() as s:
+            yield s
+
+    state = {"s": Settings(database_url="sqlite://", discovery_mode="queue", github_token="ghp_test")}
+    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[get_settings] = lambda: state["s"]
+    url = "https://api.github.com/repos/Basit-of-Africa/furis/actions/workflows/discovery.yml/dispatches"
+    try:
+        c = TestClient(app)
+        h = {"X-User-Email": "ro@fuo.test"}
+        with respx.mock:
+            route = respx.post(url).mock(return_value=httpx.Response(204))
+            res = c.post("/discovery/all", headers=h).json()
+            assert res["dispatched"] is True and res["count"] == 2 and "few minutes" in res["message"]
+            sent = route.calls[0].request
+            assert sent.headers["Authorization"] == "Bearer ghp_test" and b'"scope":"pending"' in sent.content.replace(b" ", b"")
+            # queuing everyone again does not duplicate pending requests
+            c.post("/discovery/all", headers=h)
+            assert len(db.scalars(select(DiscoveryRequest)).all()) == 2
+            # GitHub refuses (bad token): still queued, honest message
+            respx.post(url).mock(return_value=httpx.Response(401, json={"message": "Bad credentials"}))
+            rid = db.scalars(select(Researcher.id)).first()
+            res = c.post(f"/discovery/researchers/{rid}", headers=h).json()
+            assert res["dispatched"] is False and "FURIS_GITHUB_TOKEN" in res["message"]
+        state["s"] = Settings(database_url="sqlite://", discovery_mode="queue")  # no token: no call at all
+        assert c.post("/discovery/all", headers=h).json()["dispatched"] is False
+    finally:
+        app.dependency_overrides.clear()
