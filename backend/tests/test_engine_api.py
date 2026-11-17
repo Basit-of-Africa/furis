@@ -184,8 +184,8 @@ def test_verification_flow(db, world, client, tmp_path):
     detail = client.get(f"/publications/{w1.id}", headers=H("abdul@fuo.test")).json()
     assert len(detail["sources"]) == 3
     assert any(a["researcher_id"] == str(r.id) for a in detail["authors"])
-    assert len(client.get("/verification/history", params={"publication_id": str(w1.id)},
-                          headers=H("ro@fuo.test")).json()) == 2
+    hist = client.get("/verification/history", params={"publication_id": str(w1.id)}, headers=H("ro@fuo.test")).json()
+    assert [h["reviewer_name"] for h in hist] == ["Abdul", "Research Office"]
 
     # Evaluate against a ground-truth file.
     gt = tmp_path / "gt.csv"
@@ -228,3 +228,31 @@ def test_staff_import(client, db):
     assert d["identifiers"][0]["verified"] is False  # imported ORCIDs need verification
     assert any(v["variant_name"] == "A. Lawal" for v in d["name_variants"])
     assert d["employment"][0]["start_date"] == "2019-10-01"
+
+
+def test_portal_endpoints(db, world, client):
+    r, eng, _ = world
+    eng.run_for_researcher(r.id)
+    me = client.get("/me", headers=H("abdul@fuo.test")).json()
+    assert me["role"] == "researcher" and me["researcher_id"] == str(r.id)
+
+    q = client.get("/verification/queue", headers=H("ro@fuo.test")).json()
+    assert q[0]["researcher"]["last_name"] == "Ajibade"
+
+    ms = client.get(f"/researchers/{r.id}/matches", headers=H("abdul@fuo.test")).json()
+    assert {m["publication"]["doi"] for m in ms} >= {"10.5555/a", "10.5555/b"}
+    assert client.get(f"/researchers/{r.id}/matches", headers=H("other@fuo.test")).status_code == 404
+
+    w1 = db.scalar(select(Publication).where(Publication.doi == "10.5555/a"))
+    d = client.get(f"/publications/{w1.id}", headers=H("abdul@fuo.test")).json()
+    assert any(a["is_fountain_university"] for a in d["affiliations"])
+    assert d["researchers"][0]["id"] == str(r.id)
+
+    client.post("/verification/authorship", headers=H("abdul@fuo.test"),
+                json={"publication_id": str(w1.id), "researcher_id": str(r.id), "decision": "confirmed"})
+    aq = client.get("/verification/attribution-queue", headers=H("ro@fuo.test")).json()
+    assert [i["publication"]["id"] for i in aq] == [str(w1.id)]
+    assert client.get("/verification/attribution-queue", headers=H("abdul@fuo.test")).status_code == 403
+
+    dups = client.get("/duplicates", headers=H("ro@fuo.test")).json()
+    assert dups[0]["publication"]["title"] and dups[0]["other_publication"]["title"]

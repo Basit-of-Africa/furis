@@ -8,7 +8,7 @@ This repository holds the MVP foundation from the project brief (§24, steps 4�
 - the verification API
 - pilot evaluation against a ground-truth dataset
 
-The Next.js admin and researcher portal (§11.2 Layer 1) is the next phase. It will be built on top of this API.
+It also includes the Next.js portal (§11.2 Layer 1) for the Research Office, faculty administrators and researchers.
 
 > **Principle:** discover broadly, match carefully, attribute correctly, report transparently.
 
@@ -79,6 +79,37 @@ uvicorn furis.main:app --reload
 
 The API docs are then at `http://localhost:8000/docs`. Send `X-User-Email: ro@fuo.edu.ng` with each request.
 
+## Portal (Next.js)
+
+```bash
+cd frontend && npm install
+```
+
+```bash
+cp .env.example .env.local
+```
+
+```bash
+npm run build && npm start
+```
+
+The portal runs at `http://localhost:3000`. Set `FURIS_API_URL` in `.env.local` to the backend address. Only the Next.js server calls the API; the browser never does.
+
+| Page | Who sees it | What it does |
+|---|---|---|
+| Dashboard | Admins, faculty admins | Headline counts, confirmed FU output by year (chart plus table view), output by faculty, ORCID coverage, search-run health |
+| Review queue: Authorship | Everyone (scoped by role) | Candidates sorted by confidence, with the evidence behind each match; confirm or reject |
+| Review queue: Attribution | Research Office, Super Admin | Confirmed authorships with no attribution decision; FU output needs written evidence |
+| Publications | Everyone (scoped) | Filter by authorship status, attribution status and year |
+| Publication detail | Everyone (scoped) | Per-researcher evidence and decisions, authors, affiliation evidence, per-source citations, decision history with reviewer names |
+| Researchers | Admins, faculty admins | Registry search, add a researcher, CSV import, faculties and departments |
+| Researcher profile | Admins, faculty admins, the researcher | Identifiers (verify), employment history, name variants, discovered names to confirm, publications, latest discovery run, "Run discovery" |
+| Duplicates | Research Office, Super Admin | Side-by-side possible duplicates; merge or keep separate |
+
+Researchers sign in to "Is this your publication?", their own queue. They can confirm authorship and the names they publish under, but cannot decide attribution.
+
+**Sign-in is development-only.** The portal stores the user's email in an httpOnly cookie and forwards it as `X-User-Email`. Replace this with university SSO in `frontend/src/lib/api.ts`, `frontend/src/app/actions.ts` and `backend/furis/api/deps.py` at the same time.
+
 ## Neon (§11.4)
 
 1. Create the project `furis-production` with the database `furis_db` and two branches, `main` and `development`.
@@ -137,12 +168,13 @@ backend/furis/
   evaluation.py          pilot metrics
   api/                   registry, discovery, publications/analytics, verification, duplicates
 backend/alembic/         migrations (0001 = initial schema)
+frontend/src/app/        Next.js App Router pages and server actions (all API calls server-side)
+frontend/src/components/ review items, evidence panels, badges, forms, chart
 samples/                 staff import and ground-truth CSV templates
 ```
 
 ## Not yet built
 
-- Next.js portal.
 - Semantic Scholar adapter (the `Source` interface is ready for it).
 - A production job queue; discovery currently runs from the CLI or a FastAPI background task.
 - Topic and interest evidence in matching.

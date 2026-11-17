@@ -16,6 +16,7 @@ from furis.models import (
     InstitutionalAttribution,
     MatchStatus,
     Publication,
+    PublicationAffiliation,
     Researcher,
     ResearcherIdentifier,
     SearchRun,
@@ -79,6 +80,13 @@ def get_publication(publication_id: uuid.UUID, db: Session = Depends(get_db), us
     out = s.PublicationDetail.model_validate(pub)
     out.matches = [s.MatchOut.model_validate(m) for m in matches]
     out.attributions = [s.AttributionOut.model_validate(a) for a in db.scalars(a_stmt)]
+    visible = {m.researcher_id for m in matches}
+    out.affiliations = [
+        s.AffiliationOut.model_validate(a)
+        for a in db.scalars(select(PublicationAffiliation).where(PublicationAffiliation.publication_id == pub.id))
+        if a.researcher_id in visible or (a.researcher_id is None and user.role in ADMIN_ROLES)
+    ]
+    out.researchers = [s.ResearcherRef.model_validate(db.get(Researcher, rid)) for rid in visible]
     return out
 
 
