@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 
 from furis.config import get_settings
-from furis.db import make_engine
+from furis.db import clean_database_url, make_engine
 from furis.models import Base
 
 if context.config.config_file_name:
@@ -11,7 +11,7 @@ if context.config.config_file_name:
 
 settings = get_settings()
 # Migrations use Neon's *direct* connection; pooled (PgBouncer) connections can break DDL.
-URL = settings.database_url_direct or settings.database_url
+URL = clean_database_url(settings.database_url_direct or settings.database_url)
 
 
 def run_migrations_offline():
