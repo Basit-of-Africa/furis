@@ -240,3 +240,14 @@ def test_google_issuer_forms():
         assert v.verify(token(iss=iss, hd="fuo.edu.ng"), NONCE).email == "ro@fuo.edu.ng"
     with pytest.raises(AuthError):  # personal Gmail-style account: no hd claim
         v.verify(token(iss="accounts.google.com"), NONCE)
+
+
+def test_neon_integration_env_names(monkeypatch):
+    for k in ("FURIS_DATABASE_URL", "FURIS_DATABASE_URL_DIRECT"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@ep-x-pooler.neon.tech/furis_db?sslmode=require")
+    monkeypatch.setenv("DATABASE_URL_UNPOOLED", "postgresql://u:p@ep-x.neon.tech/furis_db?sslmode=require")
+    s = Settings(_env_file=None)
+    assert "pooler" in s.database_url and "pooler" not in s.database_url_direct
+    monkeypatch.setenv("FURIS_DATABASE_URL", "sqlite://")
+    assert Settings(_env_file=None).database_url == "sqlite://"  # FURIS_* wins

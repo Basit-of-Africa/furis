@@ -1,14 +1,19 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="FURIS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="FURIS_", env_file=".env", extra="ignore", populate_by_name=True)
 
     # Neon: use the *pooled* string for the app, the *direct* string for Alembic (§11.4).
-    database_url: str = "sqlite:///./furis_dev.db"
-    database_url_direct: str | None = None
+    # Also reads the names the Vercel–Neon integration injects (DATABASE_URL = pooled,
+    # DATABASE_URL_UNPOOLED = direct); FURIS_* takes precedence when both are set.
+    database_url: str = Field("sqlite:///./furis_dev.db",
+                              validation_alias=AliasChoices("FURIS_DATABASE_URL", "DATABASE_URL"))
+    database_url_direct: str | None = Field(None, validation_alias=AliasChoices("FURIS_DATABASE_URL_DIRECT",
+                                                                                   "DATABASE_URL_UNPOOLED"))
 
     # Polite-pool contact for OpenAlex/Crossref. Set to a Research Office mailbox.
     contact_email: str | None = None
