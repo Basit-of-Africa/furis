@@ -56,7 +56,7 @@ def queue(
     db: Session = Depends(get_db), user: User = Depends(current_user),
 ):
     stmt = (
-        select(IdentityMatch, Publication, InstitutionalAttribution)
+        select(IdentityMatch, Publication, InstitutionalAttribution, Researcher)
         .join(Publication, Publication.id == IdentityMatch.publication_id)
         .join(Researcher, Researcher.id == IdentityMatch.researcher_id)
         .outerjoin(InstitutionalAttribution,
@@ -75,9 +75,31 @@ def queue(
     if confidence:
         stmt = stmt.where(IdentityMatch.confidence == confidence)
     return [
-        s.QueueItem(match=m, publication=p, attribution=a)
-        for m, p, a in db.execute(stmt.limit(limit).offset(offset))
+        s.QueueItem(match=m, publication=p, attribution=a, researcher=r)
+        for m, p, a, r in db.execute(stmt.limit(limit).offset(offset))
     ]
+
+
+@router.get("/attribution-queue", response_model=list[s.QueueItem])
+def attribution_queue(
+    researcher_id: uuid.UUID | None = None, limit: int = Query(50, le=200), offset: int = 0,
+    db: Session = Depends(get_db), user: User = Depends(require_admin),
+):
+    """Confirmed authorships whose institutional attribution has not been decided."""
+    stmt = (
+        select(IdentityMatch, Publication, InstitutionalAttribution, Researcher)
+        .join(Publication, Publication.id == IdentityMatch.publication_id)
+        .join(Researcher, Researcher.id == IdentityMatch.researcher_id)
+        .outerjoin(InstitutionalAttribution,
+                   (InstitutionalAttribution.publication_id == IdentityMatch.publication_id)
+                   & (InstitutionalAttribution.researcher_id == IdentityMatch.researcher_id))
+        .where(IdentityMatch.match_status == MatchStatus.CONFIRMED, InstitutionalAttribution.final_status.is_(None))
+        .order_by(Publication.publication_year.desc().nulls_last(), Publication.title)
+    )
+    if researcher_id:
+        stmt = stmt.where(IdentityMatch.researcher_id == researcher_id)
+    return [s.QueueItem(match=m, publication=p, attribution=a, researcher=r)
+            for m, p, a, r in db.execute(stmt.limit(limit).offset(offset))]
 
 
 def _get_match(db: Session, pub_id: uuid.UUID, rid: uuid.UUID) -> IdentityMatch:
@@ -169,8 +191,10 @@ def history(publication_id: uuid.UUID, db: Session = Depends(get_db), user: User
         r = db.get(Researcher, v.researcher_id)
         if r and (user.role in ADMIN_ROLES or user.researcher_id == r.id
                   or (user.role == UserRole.FACULTY_ADMIN and user.faculty_id == r.faculty_id)):
+            reviewer = db.get(User, v.reviewer_id)
             out.append({"type": v.verification_type.value, "decision": v.decision, "researcher_id": str(r.id),
-                        "reviewer_id": str(v.reviewer_id), "evidence": v.evidence, "comments": v.comments,
+                        "reviewer_id": str(v.reviewer_id), "reviewer_name": reviewer.full_name if reviewer else None,
+                        "evidence": v.evidence, "comments": v.comments,
                         "verified_at": v.verified_at.isoformat()})
     return out
 
@@ -183,7 +207,15 @@ dup_router = APIRouter(prefix="/duplicates", tags=["deduplication"])
 @dup_router.get("", response_model=list[s.DuplicateOut])
 def list_duplicates(status: DuplicateStatus = DuplicateStatus.PENDING, db: Session = Depends(get_db),
                     _: User = Depends(require_admin)):
-    return db.scalars(select(DuplicateCandidate).where(DuplicateCandidate.status == status)).all()
+    out = []
+    for d in db.scalars(select(DuplicateCandidate).where(DuplicateCandidate.status == status)
+                        .order_by(DuplicateCandidate.similarity.desc())):
+        item = s.DuplicateOut.model_validate(d)
+        a, b = db.get(Publication, d.publication_id), db.get(Publication, d.other_publication_id)
+        item.publication = s.PublicationOut.model_validate(a) if a else None
+        item.other_publication = s.PublicationOut.model_validate(b) if b else None
+        out.append(item)
+    return out
 
 
 @dup_router.post("/{dup_id}", response_model=s.DuplicateOut)

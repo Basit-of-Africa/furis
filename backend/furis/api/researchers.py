@@ -16,6 +16,9 @@ from furis.discovery.names import normalise_name
 from furis.discovery.sources.base import HttpClient
 from furis.discovery.sources.openalex import OpenAlexSource
 from furis.models import (
+    IdentityMatch,
+    InstitutionalAttribution,
+    Publication,
     ConfirmationStatus,
     Department,
     EmploymentHistory,
@@ -222,3 +225,19 @@ def add_employment(researcher_id: uuid.UUID, body: s.EmploymentIn, db: Session =
     audit(db, user, "create", "employment_history", e.id, new=body.model_dump(mode="json"))
     db.commit()
     return e
+
+
+@router.get("/researchers/{researcher_id}/matches", response_model=list[s.QueueItem])
+def researcher_matches(researcher_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Every candidate, confirmed and rejected match for one researcher, newest publications first."""
+    r = get_researcher_for(db, user, researcher_id)
+    rows = db.execute(
+        select(IdentityMatch, Publication, InstitutionalAttribution)
+        .join(Publication, Publication.id == IdentityMatch.publication_id)
+        .outerjoin(InstitutionalAttribution,
+                   (InstitutionalAttribution.publication_id == IdentityMatch.publication_id)
+                   & (InstitutionalAttribution.researcher_id == IdentityMatch.researcher_id))
+        .where(IdentityMatch.researcher_id == r.id)
+        .order_by(Publication.publication_year.desc().nulls_last(), Publication.title)
+    )
+    return [s.QueueItem(match=m, publication=p, attribution=a, researcher=r) for m, p, a in rows]

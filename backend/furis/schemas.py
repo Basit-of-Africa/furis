@@ -220,12 +220,41 @@ class PublicationDetail(PublicationOut):
     authors: list[AuthorOut]
     matches: list[MatchOut] = []
     attributions: list[AttributionOut] = []
+    affiliations: list[AffiliationOut] = []
+    researchers: list[ResearcherRef] = []
+
+
+class ResearcherRef(ORM):
+    id: uuid.UUID
+    first_name: str
+    middle_name: str | None
+    last_name: str
+    staff_number: str | None
 
 
 class QueueItem(BaseModel):
     match: MatchOut
     publication: PublicationOut
     attribution: AttributionOut | None
+    researcher: ResearcherRef | None = None
+
+
+class AffiliationOut(ORM):
+    researcher_id: uuid.UUID | None
+    author_position: int | None
+    raw_affiliation: str
+    normalised_institution: str | None
+    is_fountain_university: bool
+    source_name: str
+
+
+class Me(ORM):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    role: str
+    faculty_id: uuid.UUID | None
+    researcher_id: uuid.UUID | None
 
 
 class AuthorshipDecision(BaseModel):
@@ -251,6 +280,8 @@ class DuplicateOut(ORM):
     similarity: float
     reason: str
     status: DuplicateStatus
+    publication: PublicationOut | None = None
+    other_publication: PublicationOut | None = None
 
 
 class DuplicateDecision(BaseModel):
