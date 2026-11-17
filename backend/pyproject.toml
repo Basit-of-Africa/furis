@@ -30,5 +30,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["furis*"]
 
+# Vercel's FastAPI preset (project Root Directory = backend) serves this ASGI app.
+[tool.vercel]
+entrypoint = "furis.main:app"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

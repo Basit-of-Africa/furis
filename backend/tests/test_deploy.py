@@ -1,6 +1,5 @@
 """Serverless deployment: discovery queue, Vercel entry point, database settings."""
 
-import importlib.util
 import pathlib
 
 from sqlalchemy import select
@@ -29,12 +28,13 @@ def test_engine_settings(monkeypatch):
     assert isinstance(make_engine(url).pool, NullPool)
 
 
-def test_vercel_entry_point_exports_app():
-    path = pathlib.Path(__file__).parent.parent / "api" / "index.py"
-    spec = importlib.util.spec_from_file_location("vercel_entry", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    assert mod.app.title == "FURIS API"
+def test_vercel_entrypoint_is_importable():
+    import importlib
+    import tomllib
+
+    cfg = tomllib.loads((pathlib.Path(__file__).parent.parent / "pyproject.toml").read_text())
+    module, _, attr = cfg["tool"]["vercel"]["entrypoint"].partition(":")
+    assert getattr(importlib.import_module(module), attr).title == "FURIS API"
 
 
 class FakeEngine:
