@@ -178,6 +178,12 @@ class User(Base, TimestampMixin):
     faculty_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("faculties.id"))
     researcher_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("researchers.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Password sign-in (auth_mode="password"). Never stores the password itself.
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Researcher(Base, TimestampMixin):

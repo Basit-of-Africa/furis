@@ -14,21 +14,24 @@ export function ActionForm({
   children,
   className,
   hidden,
+  keepMessage = false,
 }: {
   action: Action;
   children: React.ReactNode;
   className?: string;
   hidden?: Record<string, string>;
+  /** Show the result inline and keep it (e.g. a one-time temporary password) instead of a toast. */
+  keepMessage?: boolean;
 }) {
   const toast = useToast();
   // Report success through the layout toast: the form itself often unmounts once the
   // page refreshes (e.g. a reviewed item leaves the queue). Errors stay inline.
   const [state, formAction] = useActionState(async (prev: ActionResult, fd: FormData) => {
     const result = await action(prev, fd);
-    if (result?.ok && result.message && toast) toast(result.message);
+    if (result?.ok && result.message && toast && !keepMessage) toast(result.message);
     return result;
   }, null);
-  const showInline = state?.message && (!state.ok || !toast);
+  const showInline = state?.message && (!state.ok || !toast || keepMessage);
   return (
     <form action={formAction} className={className}>
       {hidden && Object.entries(hidden).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}

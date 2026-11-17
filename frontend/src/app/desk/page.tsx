@@ -10,7 +10,7 @@ export const metadata = { title: "Dashboard" };
 
 export default async function Dashboard() {
   const me = await getMe();
-  if (me.role === "researcher") redirect("/queue");
+  if (me.role === "researcher") redirect("/desk/queue");
   const [s, faculties] = await Promise.all([apiGet<Summary>("/analytics/summary"), apiGet<Faculty[]>("/faculties")]);
   const facName = new Map(faculties.map((f) => [f.id, f.name]));
   const years = s.fu_output_by_year.map((r) => ({ year: r.year === null ? "Unknown" : String(r.year), count: r.count }));
@@ -38,7 +38,7 @@ export default async function Dashboard() {
           <div className="tile-value">{s.confirmed_researcher_publications}</div>
           <div className="tile-note">Authorship verified</div>
         </div>
-        <Link className="tile" href="/queue">
+        <Link className="tile" href="/desk/queue">
           <div className="tile-label">Awaiting authorship review</div>
           <div className="tile-value">{s.awaiting_authorship_review}</div>
           <div className="tile-note">Open the review queue →</div>

@@ -17,6 +17,17 @@ export interface Me {
   role: Role;
   faculty_id: string | null;
   researcher_id: string | null;
+  must_change_password: boolean;
+}
+
+export interface DeskUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: Role;
+  is_active: boolean;
+  must_change_password: boolean;
+  locked: boolean;
 }
 
 export interface Faculty { id: string; name: string; code: string | null }

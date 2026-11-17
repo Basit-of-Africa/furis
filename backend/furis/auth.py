@@ -68,12 +68,13 @@ def issue_session(settings: Settings, user_id: uuid.UUID, method: str) -> tuple[
     return token, exp
 
 
-def read_session(settings: Settings, token: str) -> uuid.UUID:
+def read_session(settings: Settings, token: str) -> tuple[uuid.UUID, int]:
+    """Returns (user id, issued-at as a Unix timestamp)."""
     try:
         claims = jwt.decode(token, _secret(settings), algorithms=["HS256"], audience=SESSION_AUDIENCE,
                             issuer=SESSION_ISSUER, leeway=CLOCK_SKEW_SECONDS,
                             options={"require": ["exp", "iat", "sub", "iss", "aud"]})
-        return uuid.UUID(claims["sub"])
+        return uuid.UUID(claims["sub"]), int(claims["iat"])
     except (jwt.PyJWTError, ValueError) as e:
         raise AuthError("Your session has expired. Please sign in again.", str(e)) from e
 

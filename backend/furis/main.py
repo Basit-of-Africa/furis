@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI
 
-from furis.api import auth, discovery, publications, researchers, verification
+from furis.api import auth, discovery, public, publications, researchers, users, verification
 from furis.api.deps import current_user
 from furis.config import get_settings, validate_auth_settings
 from furis.models import User
@@ -16,6 +16,8 @@ app = FastAPI(
     version="0.1.0",
 )
 app.include_router(auth.router)
+app.include_router(public.router)
+app.include_router(users.router)
 app.include_router(researchers.router)
 app.include_router(discovery.router)
 app.include_router(publications.router)
@@ -31,4 +33,5 @@ def health():
 @app.get("/me", response_model=Me, tags=["system"])
 def me(user: User = Depends(current_user)):
     return Me(id=user.id, email=user.email, full_name=user.full_name, role=user.role.value,
-              faculty_id=user.faculty_id, researcher_id=user.researcher_id)
+              faculty_id=user.faculty_id, researcher_id=user.researcher_id,
+              must_change_password=bool(user.must_change_password))

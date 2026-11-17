@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
-import { signIn } from "@/app/actions";
+import { signIn, signInPassword } from "@/app/actions";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { safeNext } from "@/lib/oidc";
 import { AUTH_ERROR_COOKIE, authMode } from "@/lib/session";
@@ -27,17 +27,36 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="brand-mark" aria-hidden>FU</div>
           <div>
             <div className="brand-name">FURIS</div>
-            <div className="brand-sub">Research Intelligence System</div>
+            <div className="brand-sub">Research Desk sign-in</div>
           </div>
         </div>
 
         {error && <p role="alert" className="notice notice-error" style={{ marginTop: 0 }}>{error}</p>}
 
+        {mode === "password" && (
+          <ActionForm action={signInPassword} className="stack" hidden={{ next }}>
+            <label>
+              Email address
+              <input type="email" name="email" required autoComplete="username" />
+            </label>
+            <label>
+              Password
+              <input type="password" name="password" required autoComplete="current-password" />
+            </label>
+            <div>
+              <SubmitButton>Sign in</SubmitButton>
+            </div>
+            <p className="small muted">
+              For the Research Desk team. Forgotten your password? Ask the Research Desk administrator to reset it.
+            </p>
+          </ActionForm>
+        )}
+
         {mode === "oidc" && (
           <>
             <p className="muted">Sign in with your Fountain University account.</p>
             <div>
-              <a className="btn btn-primary" href={`/auth/login${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}>
+              <a className="btn btn-primary" href={`/auth/login${next !== "/desk" ? `?next=${encodeURIComponent(next)}` : ""}`}>
                 Sign in with university account
               </a>
             </div>
@@ -64,6 +83,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             </ActionForm>
           </>
         )}
+
+        <p className="small muted">
+          Looking for Fountain University research? <a href="/">Browse the public research view</a>; no sign-in needed.
+        </p>
 
         {mode === "unavailable" && (
           <p className="notice notice-error" style={{ marginTop: 0 }}>The FURIS API is not reachable. Try again shortly.</p>

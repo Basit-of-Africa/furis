@@ -27,7 +27,7 @@ export default async function PublicationPage({ params }: { params: Promise<{ id
     <>
       <div className="page-head">
         <div style={{ minWidth: 0 }}>
-          <div className="crumbs"><Link href="/publications">Publications</Link> /</div>
+          <div className="crumbs"><Link href="/desk/publications">Publications</Link> /</div>
           <h1>{pub.title}</h1>
           <PublicationMeta p={pub} />
         </div>
@@ -45,7 +45,7 @@ export default async function PublicationPage({ params }: { params: Promise<{ id
             return (
               <section className="card" key={m.id}>
                 <div className="card-head">
-                  <h2>{r ? <Link href={`/researchers/${r.id}`}>{researcherName(r)}</Link> : "Researcher"}</h2>
+                  <h2>{r ? <Link href={`/desk/researchers/${r.id}`}>{researcherName(r)}</Link> : "Researcher"}</h2>
                   <div className="row">
                     {m.match_status === "candidate" ? <ConfidenceBadge c={m.confidence} score={m.confidence_score} /> : <MatchStatusBadge s={m.match_status} />}
                     <AttributionBadge a={a} />

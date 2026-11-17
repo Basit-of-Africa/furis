@@ -131,7 +131,7 @@ def test_session_tokens():
     import uuid
     uid = uuid.uuid4()
     tok, _ = issue_session(s, uid, "oidc")
-    assert read_session(s, tok) == uid
+    assert read_session(s, tok)[0] == uid
     with pytest.raises(AuthError):
         read_session(settings(session_secret="t" * 40), tok)  # different secret
     expired = jwt.encode({"iss": "furis", "aud": "furis-api", "sub": str(uid), "iat": 0, "exp": 1}, s.session_secret,

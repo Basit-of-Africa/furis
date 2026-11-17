@@ -38,10 +38,21 @@ class Settings(BaseSettings):
     # "development" | "production". Production refuses to start with dev sign-in.
     environment: str = "development"
 
-    # Authentication (see furis/auth.py):
+    # Authentication (see furis/auth.py and furis/passwords.py):
+    #   "password"   Research Desk accounts with passwords (no external provider needed)
     #   "oidc"       university single sign-on via any OpenID Connect provider
     #   "dev_header" trusts an email with no password; development only
     auth_mode: str = "dev_header"
+
+    # First Research Desk officer (password mode). On first sign-in with exactly these
+    # credentials the account is created as Super Administrator and must change its
+    # password. After that the account's own password is used; remove these settings.
+    bootstrap_admin_email: str | None = None
+    bootstrap_admin_name: str = "Research Desk Officer"
+    bootstrap_admin_password: str | None = None
+
+    # Public, read-only research view (confirmed publications only). No sign-in.
+    public_view: bool = True
 
     # OpenID Connect. Examples of issuer:
     #   Google Workspace:      https://accounts.google.com
@@ -79,19 +90,24 @@ class ConfigError(RuntimeError):
 
 def validate_auth_settings(s: Settings) -> None:
     """Fail fast on unsafe or incomplete authentication configuration."""
-    if s.auth_mode not in ("oidc", "dev_header"):
-        raise ConfigError(f"unknown FURIS_AUTH_MODE {s.auth_mode!r}")
     import os
 
-    if os.environ.get("VERCEL") and s.auth_mode != "oidc":
+    if s.auth_mode not in ("password", "oidc", "dev_header"):
+        raise ConfigError(f"unknown FURIS_AUTH_MODE {s.auth_mode!r}")
+    public_server = bool(os.environ.get("VERCEL")) or s.environment == "production"
+    if public_server:
         # Every Vercel deployment has a public URL: never serve password-free sign-in there,
         # even if FURIS_ENVIRONMENT was forgotten.
-        raise ConfigError("on Vercel, FURIS_AUTH_MODE must be oidc; dev sign-in has no password check")
-    if s.environment == "production":
-        if s.auth_mode != "oidc":
-            raise ConfigError("production requires FURIS_AUTH_MODE=oidc; dev sign-in has no password check")
+        if s.auth_mode == "dev_header":
+            raise ConfigError("on a public server FURIS_AUTH_MODE must be password or oidc; "
+                              "dev sign-in has no password check")
         if not s.session_secret or len(s.session_secret) < 32:
-            raise ConfigError("production requires FURIS_SESSION_SECRET of at least 32 characters")
+            raise ConfigError("FURIS_SESSION_SECRET of at least 32 characters is required on a public server")
+    if s.auth_mode == "password":
+        if s.bootstrap_admin_password is not None and len(s.bootstrap_admin_password) < 12:
+            raise ConfigError("FURIS_BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters")
+        if bool(s.bootstrap_admin_email) != bool(s.bootstrap_admin_password):
+            raise ConfigError("set both FURIS_BOOTSTRAP_ADMIN_EMAIL and FURIS_BOOTSTRAP_ADMIN_PASSWORD, or neither")
     if s.auth_mode == "oidc":
         missing = [n for n, v in (("FURIS_OIDC_ISSUER", s.oidc_issuer), ("FURIS_OIDC_CLIENT_ID", s.oidc_client_id),
                                   ("FURIS_SESSION_SECRET", s.session_secret)) if not v]

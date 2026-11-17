@@ -10,7 +10,7 @@ export function Nav({ items }: { items: NavItem[] }) {
   return (
     <nav className="nav" aria-label="Main">
       {items.map((i) => {
-        const active = i.href === "/" ? path === "/" : path === i.href || path.startsWith(`${i.href}/`);
+        const active = i.href === "/desk" ? path === "/desk" : path === i.href || path.startsWith(`${i.href}/`);
         return (
           <Link key={i.href} href={i.href} aria-current={active ? "page" : undefined}>
             <span>{i.label}</span>
