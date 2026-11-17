@@ -105,3 +105,13 @@ def test_all_queries_failing_marks_request_failed(db):
     db.add(DiscoveryRequest(researcher_id=r.id))
     db.commit()
     assert process_pending(db, OutageEngine()) == {"processed": 1, "done": 0, "failed": 1}
+
+
+def test_dev_sign_in_refused_on_vercel(monkeypatch):
+    import pytest
+
+    from furis.config import ConfigError, validate_auth_settings
+
+    monkeypatch.setenv("VERCEL", "1")
+    with pytest.raises(ConfigError):
+        validate_auth_settings(Settings(database_url="sqlite://"))  # environment left at default

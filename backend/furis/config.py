@@ -81,6 +81,12 @@ def validate_auth_settings(s: Settings) -> None:
     """Fail fast on unsafe or incomplete authentication configuration."""
     if s.auth_mode not in ("oidc", "dev_header"):
         raise ConfigError(f"unknown FURIS_AUTH_MODE {s.auth_mode!r}")
+    import os
+
+    if os.environ.get("VERCEL") and s.auth_mode != "oidc":
+        # Every Vercel deployment has a public URL: never serve password-free sign-in there,
+        # even if FURIS_ENVIRONMENT was forgotten.
+        raise ConfigError("on Vercel, FURIS_AUTH_MODE must be oidc; dev sign-in has no password check")
     if s.environment == "production":
         if s.auth_mode != "oidc":
             raise ConfigError("production requires FURIS_AUTH_MODE=oidc; dev sign-in has no password check")
