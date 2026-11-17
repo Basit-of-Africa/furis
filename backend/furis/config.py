@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     # Defaults to "queue" when running on Vercel.
     discovery_mode: str | None = None
 
+    # Start the GitHub Actions discovery job as soon as discovery is requested (queue mode),
+    # instead of waiting for GitHub's hourly schedule. Needs a fine-grained token limited to
+    # this repository with "Actions: Read and write" permission.
+    github_token: str | None = None
+    github_repository: str = "Basit-of-Africa/furis"
+    github_workflow: str = "discovery.yml"
+    github_ref: str = "main"
+
     # "development" | "production". Production refuses to start with dev sign-in.
     environment: str = "development"
 

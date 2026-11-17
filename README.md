@@ -248,7 +248,16 @@ Then:
 
 **7. Single sign-on, only if you switch to it later.** Add the `OIDC_*` variables to the web app and `https://<web app address>/auth/callback` to the provider's redirect URIs (see *Single sign-on*).
 
-**8. Discovery.** The **Discovery** workflow processes queued requests every hour and rediscovers everyone on Mondays. You can also start it by hand from the Actions tab.
+**8. Start discovery straight away (recommended).** Without this, "Run discovery" waits for GitHub's hourly schedule, which can run late or be skipped.
+1. In GitHub, go to your profile → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Set **Repository access** to *Only select repositories* → `furis`.
+3. Under **Permissions → Repository permissions**, set **Actions** to *Read and write*. Leave everything else as *No access*.
+4. Choose an expiry (for example, one year) and generate the token.
+5. On the **backend** Vercel project, add the token as `FURIS_GITHUB_TOKEN`, then redeploy.
+
+Then "Run discovery" starts the GitHub job immediately, and results usually arrive within a few minutes.
+
+**9. Discovery.** The **Discovery** workflow processes queued requests every hour and rediscovers everyone on Mondays. You can also start it by hand from the Actions tab.
 - Job logs are public, because this repository is public. The command-line tool keeps staff names out of them.
 - GitHub pauses scheduled workflows after 60 days without repository activity. Re-enable it from the Actions tab if that happens.
 

@@ -3,7 +3,7 @@
 #  - weekly: full rediscovery for every researcher (brief §16, step 10)
 # Needs repository secret NEON_DATABASE_URL (Neon *direct* connection string)
 # and, optionally, repository variable FURIS_CONTACT_EMAIL (OpenAlex/Crossref polite pool).
-# This repository is public, so job logs are public: the CLI keeps staff names out of them.
+# This repository is public, so job logs are public: the CLI prints only counts and record IDs, never names.
 name: Discovery
 
 on:
@@ -44,9 +44,9 @@ jobs:
             echo "NEON_DATABASE_URL secret is not set; nothing to do."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.cfg.outputs.skip != 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.cfg.outputs.skip != 'true'
         with:
           python-version: "3.12"
@@ -66,4 +66,5 @@ jobs:
             SCOPE=pending
           fi
           echo "Scope: $SCOPE"
-          python -m furis.cli discover --$SCOPE > /dev/null && echo "Done. Results are in the portal (search runs)."
+          python -m furis.cli discover --$SCOPE
+          echo "Done. Results are in the Research Desk (review queue and search runs)."
