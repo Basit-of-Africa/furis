@@ -202,8 +202,11 @@ export async function addEmployment(_: ActionResult, fd: FormData): Promise<Acti
 }
 
 export async function startDiscovery(_: ActionResult, fd: FormData): Promise<ActionResult> {
-  return run(
-    () => apiSend("POST", `/discovery/researchers/${str(fd, "researcher_id")}`),
-    "Discovery started. Search runs appear below as each query finishes; refresh to update.",
-  );
+  // The API says whether it started the run or queued it for the scheduled worker.
+  let message = "Discovery requested.";
+  const r = await run(async () => {
+    const res = await apiSend<{ message?: string }>("POST", `/discovery/researchers/${str(fd, "researcher_id")}`);
+    if (res?.message) message = res.message;
+  }, "");
+  return r?.ok ? { ok: true, message } : r;
 }

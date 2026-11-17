@@ -202,7 +202,8 @@ class DiscoveryEngine:
                 run.run_status = RunStatus.FAILED
                 run.error_message = str(e)[:2000]
                 failed += 1
-                log.warning("query failed %s/%s %r: %s", q.source_name, q.query_type, q.value, e)
+                # The query text (a staff name) stays in search_runs, not in logs.
+                log.warning("query failed %s/%s (search run %s): %s", q.source_name, q.query_type, run.id, e)
             run.completed_at = utcnow()
             self.db.commit()
         return RunSummary(batch, len(queries), failed, new_total, match_total)

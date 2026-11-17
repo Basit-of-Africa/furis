@@ -157,11 +157,73 @@ FURIS works with any OpenID Connect provider: Google Workspace, Microsoft Entra 
 - The API refuses to start in `oidc` mode without an allowed email domain.
 - Dev sign-in (`FURIS_AUTH_MODE=dev_header`, email only, no password) exists for local development. In that mode the login page shows a warning.
 
-## Neon (§11.4)
+## Deploying on Vercel and Neon
 
-1. Create the project `furis-production` with the database `furis_db` and two branches, `main` and `development`.
-2. Copy `backend/.env.example` to `backend/.env`. Set `FURIS_DATABASE_URL` to the **pooled** string and `FURIS_DATABASE_URL_DIRECT` to the **direct** string, which Alembic uses.
-3. Run `alembic upgrade head`.
+FURIS runs as two Vercel projects from this one repository, sharing one Neon database. Discovery runs on GitHub Actions, because Vercel stops long jobs partway.
+
+```
+Browser ─► Portal (Vercel, frontend/) ─► API (Vercel, backend/) ─► Neon (PostgreSQL)
+                                                                      ▲
+                       GitHub Actions: queued + weekly discovery ─────┘
+```
+
+**1. Neon.** Create the database, or use the one the Vercel integration created. You need two connection strings from the Neon console:
+
+| String | Used by | Recognise it by |
+|---|---|---|
+| **Pooled** | The API | Host contains `-pooler` |
+| **Direct** | Migrations and discovery jobs | Host without `-pooler` |
+
+**2. GitHub secrets.** In the repository's Settings → Secrets and variables → Actions:
+
+| Name | Type | Value |
+|---|---|---|
+| `NEON_DATABASE_URL` | Secret | the **direct** string |
+| `FURIS_CONTACT_EMAIL` | Variable | a Research Office mailbox (optional; gives faster OpenAlex and Crossref access) |
+
+**3. Create the tables.** In the Actions tab, run **Database migrations** with *Run workflow*. Run it again whenever a change adds a migration.
+
+**4. Create the first administrator.** In Neon's SQL Editor, run:
+
+```sql
+INSERT INTO users (id, email, full_name, role, is_active, created_at, updated_at)
+VALUES (gen_random_uuid(), 'you@fuo.edu.ng', 'Your Name', 'super_admin', true, now(), now());
+```
+
+**5. API project on Vercel.** Import the repository with **Root Directory `backend`**.
+- Attach the Neon integration to **this** project. The API reads its `DATABASE_URL` variable, the pooled string.
+- Set these environment variables:
+
+  | Variable | Value |
+  |---|---|
+  | `FURIS_ENVIRONMENT` | `production` |
+  | `FURIS_AUTH_MODE` | `oidc` |
+  | `FURIS_OIDC_ISSUER` | `https://accounts.google.com` |
+  | `FURIS_OIDC_CLIENT_ID` | your Google client ID |
+  | `FURIS_OIDC_ALLOWED_EMAIL_DOMAINS` | `["fuo.edu.ng"]` |
+  | `FURIS_OIDC_REQUIRED_CLAIMS` | `{"hd":"fuo.edu.ng"}` |
+  | `FURIS_SESSION_SECRET` | a long random value |
+
+- The API refuses to start in production without these settings.
+- On Vercel, "Run discovery" automatically queues the job instead of running it.
+
+**6. Portal project on Vercel.** Import the repository again with **Root Directory `frontend`**. Don't attach Neon here; the portal never talks to the database. Set these environment variables:
+
+| Variable | Value |
+|---|---|
+| `FURIS_API_URL` | the API project's address |
+| `APP_URL` | the portal's address |
+| `OIDC_ISSUER` | `https://accounts.google.com` |
+| `OIDC_CLIENT_ID` | your Google client ID |
+| `OIDC_CLIENT_SECRET` | your Google client secret |
+
+**7. Google.** Add `https://<portal address>/auth/callback` to the OAuth client's authorized redirect URIs.
+
+**8. Discovery.** The **Discovery** workflow processes queued requests every hour and rediscovers everyone on Mondays. You can also start it by hand from the Actions tab.
+- Job logs are public, because this repository is public. The command-line tool keeps staff names out of them.
+- GitHub pauses scheduled workflows after 60 days without repository activity. Re-enable it from the Actions tab if that happens.
+
+**Local development** still uses `backend/.env`, with `FURIS_DATABASE_URL` and `FURIS_DATABASE_URL_DIRECT` (Neon's `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are also accepted), and then `alembic upgrade head`.
 
 ## Before the pilot
 
@@ -223,6 +285,5 @@ samples/                 staff import and ground-truth CSV templates
 ## Not yet built
 
 - Semantic Scholar adapter (the `Source` interface is ready for it).
-- A production job queue; discovery currently runs from the CLI or a FastAPI background task.
 - Topic and interest evidence in matching.
 - Citation analytics, collaboration graph and ranking-framework indicators (later phases).

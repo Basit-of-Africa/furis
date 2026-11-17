@@ -1,0 +1,31 @@
+# Creates or updates the FURIS tables on Neon. Run it from the Actions tab after
+# merging a change that adds a migration (and once, before first use).
+# Needs repository secret NEON_DATABASE_URL (Neon *direct* connection string).
+name: Database migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      FURIS_DATABASE_URL_DIRECT: ${{ secrets.NEON_DATABASE_URL }}
+      FURIS_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Upgrade to the latest schema
+        run: |
+          test -n "$FURIS_DATABASE_URL_DIRECT" || { echo "Set the NEON_DATABASE_URL secret first."; exit 1; }
+          alembic upgrade head
+          alembic current

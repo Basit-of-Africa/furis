@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     fu_openalex_institution_ids: list[str] = []
     fu_ror_ids: list[str] = []
 
+    # How the "Run discovery" button works:
+    #   "background" run in the API process (a normal always-on server)
+    #   "queue"      record a request for the scheduled worker (serverless, e.g. Vercel)
+    # Defaults to "queue" when running on Vercel.
+    discovery_mode: str | None = None
+
     # "development" | "production". Production refuses to start with dev sign-in.
     environment: str = "development"
 
@@ -59,6 +65,12 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def discovery_mode(s: Settings) -> str:
+    import os
+
+    return s.discovery_mode or ("queue" if os.environ.get("VERCEL") else "background")
 
 
 class ConfigError(RuntimeError):

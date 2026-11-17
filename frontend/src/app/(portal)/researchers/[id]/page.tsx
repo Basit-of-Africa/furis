@@ -37,11 +37,14 @@ export default async function ResearcherPage({ params }: { params: Promise<{ id:
   const self = me.researcher_id === r.id;
   const canEditNames = admin || self;
 
-  const [matches, runs, faculties, departments] = await Promise.all([
+  const [matches, runs, faculties, departments, queued] = await Promise.all([
     apiGet<QueueItem[]>(`/researchers/${r.id}/matches`),
     apiGet<SearchRun[]>(`/discovery/runs${qs({ researcher_id: r.id, limit: 60 })}`),
     apiGet<Faculty[]>("/faculties"),
     apiGet<Department[]>("/departments"),
+    apiGetOptional<{ pending: boolean; status: string | null; requested_at: string | null }>(
+      `/discovery/requests/pending${qs({ researcher_id: r.id })}`,
+    ),
   ]);
   const fac = faculties.find((f) => f.id === r.faculty_id);
   const dep = departments.find((d) => d.id === r.department_id);
@@ -66,11 +69,15 @@ export default async function ResearcherPage({ params }: { params: Promise<{ id:
               .filter(Boolean).join(" · ")}
           </p>
         </div>
-        {admin && (
+        {admin && (queued?.pending ? (
+          <span className="badge badge-info" title={queued.requested_at ? `Requested ${fmtDateTime(queued.requested_at)}` : undefined}>
+            {queued.status === "running" ? "Discovery running" : "Discovery queued"}
+          </span>
+        ) : (
           <ActionForm action={startDiscovery} hidden={{ researcher_id: r.id }}>
             <SubmitButton>Run discovery</SubmitButton>
           </ActionForm>
-        )}
+        ))}
       </div>
 
       <div className="tiles">
