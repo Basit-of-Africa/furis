@@ -132,6 +132,13 @@ class RunStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class RequestStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
 class DuplicateStatus(str, enum.Enum):
     PENDING = "pending"
     MERGED = "merged"
@@ -405,6 +412,22 @@ class VerificationRecord(Base):
     evidence: Mapped[str | None] = mapped_column(Text)
     comments: Mapped[str | None] = mapped_column(Text)
     verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DiscoveryRequest(Base):
+    """A queued discovery job. Used when the API runs on serverless hosting (Vercel),
+    where a request cannot keep working after its response: a scheduled worker
+    (`furis discover --pending`) picks these up."""
+
+    __tablename__ = "discovery_requests"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    researcher_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("researchers.id"), index=True)
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[RequestStatus] = mapped_column(_enum(RequestStatus), default=RequestStatus.PENDING, index=True)
+    error_message: Mapped[str | None] = mapped_column(Text)
 
 
 class SearchRun(Base):

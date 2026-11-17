@@ -1,14 +1,19 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="FURIS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="FURIS_", env_file=".env", extra="ignore", populate_by_name=True)
 
     # Neon: use the *pooled* string for the app, the *direct* string for Alembic (§11.4).
-    database_url: str = "sqlite:///./furis_dev.db"
-    database_url_direct: str | None = None
+    # Also reads the names the Vercel–Neon integration injects (DATABASE_URL = pooled,
+    # DATABASE_URL_UNPOOLED = direct); FURIS_* takes precedence when both are set.
+    database_url: str = Field("sqlite:///./furis_dev.db",
+                              validation_alias=AliasChoices("FURIS_DATABASE_URL", "DATABASE_URL"))
+    database_url_direct: str | None = Field(None, validation_alias=AliasChoices("FURIS_DATABASE_URL_DIRECT",
+                                                                                   "DATABASE_URL_UNPOOLED"))
 
     # Polite-pool contact for OpenAlex/Crossref. Set to a Research Office mailbox.
     contact_email: str | None = None
@@ -23,6 +28,12 @@ class Settings(BaseSettings):
     # institution ID(s) and ROR ID before the pilot; affiliation text matching is used too.
     fu_openalex_institution_ids: list[str] = []
     fu_ror_ids: list[str] = []
+
+    # How the "Run discovery" button works:
+    #   "background" run in the API process (a normal always-on server)
+    #   "queue"      record a request for the scheduled worker (serverless, e.g. Vercel)
+    # Defaults to "queue" when running on Vercel.
+    discovery_mode: str | None = None
 
     # "development" | "production". Production refuses to start with dev sign-in.
     environment: str = "development"
@@ -56,6 +67,12 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def discovery_mode(s: Settings) -> str:
+    import os
+
+    return s.discovery_mode or ("queue" if os.environ.get("VERCEL") else "background")
+
+
 class ConfigError(RuntimeError):
     pass
 
@@ -64,6 +81,12 @@ def validate_auth_settings(s: Settings) -> None:
     """Fail fast on unsafe or incomplete authentication configuration."""
     if s.auth_mode not in ("oidc", "dev_header"):
         raise ConfigError(f"unknown FURIS_AUTH_MODE {s.auth_mode!r}")
+    import os
+
+    if os.environ.get("VERCEL") and s.auth_mode != "oidc":
+        # Every Vercel deployment has a public URL: never serve password-free sign-in there,
+        # even if FURIS_ENVIRONMENT was forgotten.
+        raise ConfigError("on Vercel, FURIS_AUTH_MODE must be oidc; dev sign-in has no password check")
     if s.environment == "production":
         if s.auth_mode != "oidc":
             raise ConfigError("production requires FURIS_AUTH_MODE=oidc; dev sign-in has no password check")

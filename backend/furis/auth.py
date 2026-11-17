@@ -146,12 +146,19 @@ class OidcVerifier:
                     return k
         raise AuthError("Sign-in failed.", f"no signing key for kid {kid!r}")
 
+    def _accepted_issuers(self) -> list[str]:
+        issuer = self.discovery()["issuer"]
+        # Google documents both forms of its issuer in ID tokens.
+        if issuer.rstrip("/") == "https://accounts.google.com":
+            return ["https://accounts.google.com", "accounts.google.com"]
+        return [issuer]
+
     def verify(self, id_token: str, nonce: str) -> VerifiedIdentity:
         key = self._key_for(id_token)
         try:
             claims = jwt.decode(
                 id_token, key, algorithms=ASYMMETRIC_ALGS, audience=self.s.oidc_client_id,
-                issuer=self.discovery()["issuer"], leeway=CLOCK_SKEW_SECONDS,
+                issuer=self._accepted_issuers(), leeway=CLOCK_SKEW_SECONDS,
                 options={"require": ["exp", "iat", "iss", "aud", "sub"]},
             )
         except jwt.ExpiredSignatureError as e:
