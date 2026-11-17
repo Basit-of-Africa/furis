@@ -124,3 +124,17 @@ def test_health_reports_database_and_schema():
 
     body = TestClient(app).get("/health").json()
     assert body["status"] == "ok" and body["database"] in ("ok", "unreachable") and "schema" in body
+
+
+def test_clean_database_url():
+    import pytest
+
+    from furis.db import DatabaseUrlError, clean_database_url
+
+    good = "postgresql://u:p@ep-x.eu-central-1.aws.neon.tech/neondb?sslmode=require"
+    for pasted in (good, f"  {good}\n", f"psql '{good}'", f"DATABASE_URL={good}", f'DATABASE_URL="{good}"', f"'{good}'"):
+        assert clean_database_url(pasted) == good
+    for bad in ("ep-x.neon.tech/neondb", "user:pass@host/db", ""):
+        with pytest.raises(DatabaseUrlError) as e:
+            clean_database_url(bad)
+        assert "p@" not in str(e.value)  # never echoes the secret
