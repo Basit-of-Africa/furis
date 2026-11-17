@@ -224,3 +224,19 @@ def test_dev_session_in_dev_mode(api):
     assert client.get("/me", headers={"Authorization": f"Bearer {res.json()['token']}"}).status_code == 200
     assert client.post("/auth/oidc/session", json={"id_token": token(), "nonce": NONCE}).status_code == 404
     assert client.get("/me", headers={"Authorization": "Bearer not-a-token"}).status_code == 401
+
+
+def test_google_issuer_forms():
+    class GoogleIdP(FakeIdP):
+        def handler(self, request):
+            if request.url.path == "/.well-known/openid-configuration":
+                return httpx.Response(200, json={"issuer": "https://accounts.google.com", "jwks_uri": f"{ISSUER}/jwks"})
+            return super().handler(request)
+
+    g = GoogleIdP()
+    v = OidcVerifier(settings(oidc_issuer="https://accounts.google.com", oidc_required_claims={"hd": "fuo.edu.ng"}),
+                     http=httpx.Client(transport=httpx.MockTransport(g.handler)))
+    for iss in ("https://accounts.google.com", "accounts.google.com"):
+        assert v.verify(token(iss=iss, hd="fuo.edu.ng"), NONCE).email == "ro@fuo.edu.ng"
+    with pytest.raises(AuthError):  # personal Gmail-style account: no hd claim
+        v.verify(token(iss="accounts.google.com"), NONCE)
