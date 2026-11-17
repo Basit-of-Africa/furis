@@ -1,0 +1,5 @@
+staff_number,doi,title,is_author,is_fu_output
+FU0001,10.1234/example.2025.001,,yes,yes
+FU0001,10.1234/example.2021.017,,yes,no
+FU0001,,Title of a paper with no DOI,yes,
+FU0001,10.1234/someone-else,,no,
