@@ -45,7 +45,7 @@ staff CSV ─► researcher registry ─► name variants (generated / confirmed
 | Provenance (§6.5, §10.3) | Every source record is kept with its raw JSON and retrieval date. Canonical fields are filled only where empty and never overwritten. Citation counts are stored per source. |
 | Discovered variants (§7.2, §7.6) | Names seen on identifier-backed matches become *pending* Category 3 variants. They are never searched until confirmed. |
 | Fuzzy duplicates (§10.1) | Fuzzy duplicates are flagged in `duplicate_candidates` for review, never merged silently. Short generic titles are never merged on title alone. |
-| Audit (§21) | Every write endpoint records an entry in `audit_logs`. |
+| Audit (§21) | Every write endpoint records an entry in `audit_logs`, as do sign-ins and refused sign-ins. |
 
 ## Quick start (local, SQLite)
 
@@ -77,7 +77,7 @@ python -m furis.cli discover --all
 uvicorn furis.main:app --reload
 ```
 
-The API docs are then at `http://localhost:8000/docs`. Send `X-User-Email: ro@fuo.edu.ng` with each request.
+The API docs are then at `http://localhost:8000/docs`. In local development mode, send `X-User-Email: ro@fuo.edu.ng` with each request; otherwise use the session token from `/auth/...` as `Authorization: Bearer`.
 
 ## Portal (Next.js)
 
@@ -108,7 +108,54 @@ The portal runs at `http://localhost:3000`. Set `FURIS_API_URL` in `.env.local` 
 
 Researchers sign in to "Is this your publication?", their own queue. They can confirm authorship and the names they publish under, but cannot decide attribution.
 
-**Sign-in is development-only.** The portal stores the user's email in an httpOnly cookie and forwards it as `X-User-Email`. Replace this with university SSO in `frontend/src/lib/api.ts`, `frontend/src/app/actions.ts` and `backend/furis/api/deps.py` at the same time.
+## Single sign-on
+
+FURIS works with any OpenID Connect provider: Google Workspace, Microsoft Entra ID (Microsoft 365), Keycloak and others.
+
+1. The portal runs the authorization-code flow with PKCE, as a confidential client, so the secret stays on the server.
+2. The **API** verifies the ID token: signature against the provider's published keys, issuer, audience, expiry, nonce and email domain.
+3. The email must belong to an **existing, active** FURIS account. Signing in never creates an account; administrators create accounts and assign roles.
+4. The API issues its own short-lived session token (8 hours by default). The portal keeps it in an httpOnly cookie.
+5. Deactivating a user ends their sessions immediately.
+
+**Setup**
+
+1. Register FURIS as a web application with the university's identity provider.
+   - Redirect URI: `https://<portal>/auth/callback`
+   - Post-logout redirect URI: `https://<portal>/login`
+   - Scopes: `openid email profile`
+2. Configure the API (`backend/.env`):
+
+   | Setting | Value |
+   |---|---|
+   | `FURIS_ENVIRONMENT` | `production` |
+   | `FURIS_AUTH_MODE` | `oidc` |
+   | `FURIS_OIDC_ISSUER` | the provider's issuer URL |
+   | `FURIS_OIDC_CLIENT_ID` | the client ID from step 1 |
+   | `FURIS_OIDC_ALLOWED_EMAIL_DOMAINS` | e.g. `["fuo.edu.ng"]` |
+   | `FURIS_SESSION_SECRET` | a long random value |
+
+   Optionally pin the directory with `FURIS_OIDC_REQUIRED_CLAIMS`: `{"hd":"fuo.edu.ng"}` for Google, or `{"tid":"<tenant-id>"}` for Entra.
+3. Configure the portal (`frontend/.env.local`):
+
+   | Setting | Value |
+   |---|---|
+   | `APP_URL` | the portal's public https address |
+   | `OIDC_ISSUER` | the same issuer as the API |
+   | `OIDC_CLIENT_ID` | the same client ID as the API |
+   | `OIDC_CLIENT_SECRET` | the client secret from step 1 |
+
+| Provider | Issuer | Notes |
+|---|---|---|
+| Google Workspace | `https://accounts.google.com` | Set the OAuth consent screen to *Internal*, and add `{"hd":"fuo.edu.ng"}` |
+| Microsoft Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` | Single-tenant app; the email is often in `preferred_username` (handled); add `{"tid":"<tenant-id>"}` |
+| Keycloak | `https://<host>/realms/<realm>` | Confidential client with standard flow enabled |
+
+**Safety checks**
+
+- The API refuses to start in production unless sign-in is `oidc` with a session secret of at least 32 characters.
+- The API refuses to start in `oidc` mode without an allowed email domain.
+- Dev sign-in (`FURIS_AUTH_MODE=dev_header`, email only, no password) exists for local development. In that mode the login page shows a warning.
 
 ## Neon (§11.4)
 
@@ -120,7 +167,7 @@ Researchers sign in to "Is this your publication?", their own queue. They can co
 
 - [ ] **Set the Fountain University identifiers.** Put the verified OpenAlex institution ID and ROR ID in `FURIS_FU_OPENALEX_INSTITUTION_IDS` and `FURIS_FU_ROR_IDS`. Until then, FU affiliation is detected from affiliation text only.
 - [ ] **Set the contact address.** Set `FURIS_CONTACT_EMAIL` to a Research Office mailbox, and add `FURIS_OPENALEX_API_KEY` if you have one.
-- [ ] **Replace dev authentication.** `FURIS_AUTH_MODE=dev_header` trusts a request header. Replace `api/deps.py::current_user` with university SSO/OIDC before real staff data goes on a reachable server.
+- [ ] **Configure single sign-on.** Register FURIS with the university's identity provider and set `FURIS_ENVIRONMENT=production` and `FURIS_AUTH_MODE=oidc` (see *Single sign-on*).
 - [ ] **Replace the draft attribution policy.** `discovery/attribution.py` encodes conservative `draft-0` rules. Replace them with the policy the Research Office approves (§9.5) and change `POLICY_VERSION`. Every assessment records the version that produced it.
 - [ ] **Check the data-source terms.** Review the ORCID public-API terms for the university's use (§21).
 - [ ] **Verify ORCIDs.** Imported ORCIDs are stored **unverified** and are not used for deterministic matching until an admin calls `POST /identifiers/{id}/verify`.

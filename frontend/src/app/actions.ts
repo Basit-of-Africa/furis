@@ -4,10 +4,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { ApiError, SESSION_COOKIE, apiSend } from "@/lib/api";
+import { ApiError, apiSend } from "@/lib/api";
+import { discover, oidcConfig, safeNext } from "@/lib/oidc";
+import { API_BASE, SESSION_COOKIE, authMode, setSession, type SessionResponse } from "@/lib/session";
 import type { ActionResult } from "@/lib/types";
-
-const BASE = (process.env.FURIS_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const str = (fd: FormData, k: string) => {
   const v = fd.get(k);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
@@ -28,31 +28,49 @@ async function run(fn: () => Promise<unknown>, success: string): Promise<ActionR
   return { ok: true, message: success };
 }
 
-// -- session (development sign-in) -------------------------------------------
+// -- session ------------------------------------------------------------------
 
+/** Development sign-in (API in dev_header mode only): exchanges an email for a session token. */
 export async function signIn(_: ActionResult, fd: FormData): Promise<ActionResult> {
   const email = str(fd, "email")?.toLowerCase();
   if (!email) return { ok: false, message: "Enter your email address." };
   let res: Response;
   try {
-    res = await fetch(`${BASE}/me`, { headers: { "X-User-Email": email }, cache: "no-store" });
+    res = await fetch(`${API_BASE}/auth/dev/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+      cache: "no-store",
+    });
   } catch {
-    return { ok: false, message: `The FURIS API is not reachable at ${BASE}.` };
+    return { ok: false, message: `The FURIS API is not reachable at ${API_BASE}.` };
   }
-  if (!res.ok) return { ok: false, message: "No active FURIS account uses that email address." };
-  (await cookies()).set(SESSION_COOKIE, email, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 12,
-  });
-  redirect("/");
+  const body = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, message: typeof body?.detail === "string" ? body.detail : "Sign-in failed." };
+  const session = body as SessionResponse;
+  await setSession(session.token, session.expires_at);
+  redirect(safeNext(str(fd, "next")));
 }
 
+/** Ends the FURIS session, then the provider session where it supports RP-initiated logout. */
 export async function signOut() {
   (await cookies()).delete(SESSION_COOKIE);
-  redirect("/login");
+  let providerLogout: string | null = null;
+  if ((await authMode()) === "oidc") {
+    try {
+      const cfg = oidcConfig();
+      const doc = await discover(cfg);
+      if (doc.end_session_endpoint) {
+        const url = new URL(doc.end_session_endpoint);
+        url.searchParams.set("client_id", cfg.clientId);
+        url.searchParams.set("post_logout_redirect_uri", cfg.postLogoutRedirectUri);
+        providerLogout = url.toString();
+      }
+    } catch {
+      // Provider unreachable: the FURIS session is already gone.
+    }
+  }
+  redirect(providerLogout ?? "/login");
 }
 
 // -- verification -------------------------------------------------------------

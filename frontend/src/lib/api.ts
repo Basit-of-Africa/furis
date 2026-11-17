@@ -6,8 +6,7 @@ import { cache } from "react";
 
 import type { Me } from "./types";
 
-export const SESSION_COOKIE = "furis_user";
-const BASE = (process.env.FURIS_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+import { API_BASE as BASE, SESSION_COOKIE } from "./session";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -15,14 +14,10 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * DEV AUTH: the backend's `dev_header` mode trusts X-User-Email. The portal keeps
- * the signed-in email in an httpOnly cookie and forwards it server-side.
- * Replace with the university's SSO (and a real token) before production.
- */
+/** Forwards the FURIS session token (issued by the API after sign-in) from its httpOnly cookie. */
 async function authHeaders(): Promise<Record<string, string>> {
-  const email = (await cookies()).get(SESSION_COOKIE)?.value;
-  return email ? { "X-User-Email": email } : {};
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function detail(body: unknown, fallback: string): string {

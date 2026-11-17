@@ -1,10 +1,13 @@
 from fastapi import Depends, FastAPI
 
+from furis.api import auth, discovery, publications, researchers, verification
 from furis.api.deps import current_user
+from furis.config import get_settings, validate_auth_settings
 from furis.models import User
 from furis.schemas import Me
 
-from furis.api import discovery, publications, researchers, verification
+# Refuse to start with unsafe or incomplete sign-in configuration.
+validate_auth_settings(get_settings())
 
 app = FastAPI(
     title="FURIS API",
@@ -12,6 +15,7 @@ app = FastAPI(
     "attribute correctly, report transparently.",
     version="0.1.0",
 )
+app.include_router(auth.router)
 app.include_router(researchers.router)
 app.include_router(discovery.router)
 app.include_router(publications.router)

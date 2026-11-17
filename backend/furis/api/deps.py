@@ -1,8 +1,9 @@
 """Authentication and role-based access (§13).
 
-AUTH MODE "dev_header" trusts an `X-User-Email` header and exists only for local
-development and the pilot sandbox. Replace `current_user` with real SSO/OIDC token
-verification before FURIS holds real staff data on a reachable server.
+Every request is identified by a FURIS session token (`Authorization: Bearer`),
+issued by /auth/oidc/session after single sign-on (see furis/auth.py).
+In auth_mode "dev_header" only, an `X-User-Email` header is also accepted, for
+local development, tests and the CLI sandbox. It is refused in production.
 """
 
 from __future__ import annotations
@@ -13,23 +14,39 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from furis.config import get_settings
+from furis.auth import AuthError, read_session
+from furis.config import Settings, get_settings
 from furis.db import get_db
 from furis.models import AuditLog, Researcher, User, UserRole
 
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.RESEARCH_OFFICE}
 
 
+def _unauthorized(msg: str) -> HTTPException:
+    return HTTPException(status.HTTP_401_UNAUTHORIZED, msg, headers={"WWW-Authenticate": "Bearer"})
+
+
 def current_user(
-    db: Session = Depends(get_db), x_user_email: str | None = Header(default=None)
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    authorization: str | None = Header(default=None),
+    x_user_email: str | None = Header(default=None),
 ) -> User:
-    if get_settings().auth_mode != "dev_header":
-        raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "configure an authentication provider")
-    if not x_user_email:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing X-User-Email")
-    user = db.scalar(select(User).where(User.email == x_user_email.lower(), User.is_active.is_(True)))
-    if not user:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unknown user")
+    if authorization:
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise _unauthorized("expected a Bearer token")
+        try:
+            user_id = read_session(settings, token.strip())
+        except AuthError as e:
+            raise _unauthorized(e.public) from e
+        user = db.get(User, user_id)
+    elif x_user_email and settings.auth_mode == "dev_header":
+        user = db.scalar(select(User).where(User.email == x_user_email.lower()))
+    else:
+        raise _unauthorized("not signed in")
+    if not user or not user.is_active:
+        raise _unauthorized("account not found or deactivated")
     return user
 
 
