@@ -29,11 +29,11 @@ export interface SessionResponse {
   expires_at: string;
 }
 
-export async function authMode(): Promise<"oidc" | "dev_header" | "unavailable"> {
+export async function authMode(): Promise<"password" | "oidc" | "dev_header" | "unavailable"> {
   try {
     const res = await fetch(`${API_BASE}/auth/config`, { cache: "no-store" });
     if (!res.ok) return "unavailable";
-    return ((await res.json()) as { mode: "oidc" | "dev_header" }).mode;
+    return ((await res.json()) as { mode: "password" | "oidc" | "dev_header" }).mode;
   } catch {
     return "unavailable";
   }

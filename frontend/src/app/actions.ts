@@ -52,6 +52,92 @@ export async function signIn(_: ActionResult, fd: FormData): Promise<ActionResul
   redirect(safeNext(str(fd, "next")));
 }
 
+/** Research Desk password sign-in (API in password mode). */
+export async function signInPassword(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const email = str(fd, "email")?.toLowerCase();
+  const password = fd.get("password");
+  if (!email || typeof password !== "string" || !password) return { ok: false, message: "Enter your email and password." };
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/password/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, message: "The FURIS API is not reachable. Try again shortly." };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, message: typeof body?.detail === "string" ? body.detail : "Sign-in failed." };
+  const session = body as SessionResponse & { user: { must_change_password: boolean } };
+  await setSession(session.token, session.expires_at);
+  redirect(session.user.must_change_password ? "/change-password" : safeNext(str(fd, "next")));
+}
+
+/** Change your own password. The API returns a new session; older sessions stop working. */
+export async function changePassword(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const current = fd.get("current_password");
+  const next = fd.get("new_password");
+  const confirm = fd.get("confirm_password");
+  if (typeof current !== "string" || typeof next !== "string" || !current || !next) {
+    return { ok: false, message: "Fill in every field." };
+  }
+  if (next !== confirm) return { ok: false, message: "The new passwords don't match." };
+  let session: SessionResponse | undefined;
+  const r = await run(async () => {
+    session = await apiSend<SessionResponse>("POST", "/auth/password/change", {
+      current_password: current,
+      new_password: next,
+    });
+  }, "Password changed.");
+  if (r?.ok && session) {
+    await setSession(session.token, session.expires_at);
+    if (str(fd, "continue_to")) redirect(safeNext(str(fd, "continue_to")));
+  }
+  return r;
+}
+
+type TempPassword = { user: { email: string }; temporary_password: string | null };
+
+function tempMessage(t: TempPassword | undefined, what: string): ActionResult {
+  if (!t) return { ok: false, message: "Something went wrong." };
+  return {
+    ok: true,
+    message: t.temporary_password
+      ? `${what} Temporary password for ${t.user.email}: ${t.temporary_password}. It is shown only once; pass it on privately. They must choose their own password at first sign-in.`
+      : `${what} They sign in with the university account.`,
+  };
+}
+
+export async function createDeskUser(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  let t: TempPassword | undefined;
+  const r = await run(async () => {
+    t = await apiSend<TempPassword>("POST", "/users", {
+      email: str(fd, "email"),
+      full_name: str(fd, "full_name"),
+      role: str(fd, "role") ?? "research_office",
+    });
+  }, "");
+  return r?.ok ? tempMessage(t, "Account created.") : r;
+}
+
+export async function resetDeskPassword(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  let t: TempPassword | undefined;
+  const r = await run(async () => {
+    t = await apiSend<TempPassword>("POST", `/users/${str(fd, "user_id")}/reset-password`);
+  }, "");
+  return r?.ok ? tempMessage(t, "Password reset; their current sessions have ended.") : r;
+}
+
+export async function setDeskUserActive(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const active = str(fd, "is_active") === "true";
+  return run(
+    () => apiSend("PATCH", `/users/${str(fd, "user_id")}`, { is_active: active }),
+    active ? "Account reactivated." : "Account deactivated.",
+  );
+}
+
 /** Ends the FURIS session, then the provider session where it supports RP-initiated logout. */
 export async function signOut() {
   (await cookies()).delete(SESSION_COOKIE);

@@ -255,6 +255,7 @@ class Me(ORM):
     role: str
     faculty_id: uuid.UUID | None
     researcher_id: uuid.UUID | None
+    must_change_password: bool = False
 
 
 class AuthorshipDecision(BaseModel):

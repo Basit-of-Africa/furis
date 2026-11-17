@@ -8,7 +8,10 @@ This repository holds the MVP foundation from the project brief (§24, steps 4�
 - the verification API
 - pilot evaluation against a ground-truth dataset
 
-It also includes the Next.js portal (§11.2 Layer 1) for the Research Office, faculty administrators and researchers.
+It also includes the Next.js web app (§11.2 Layer 1), which has two parts:
+
+- **Research Desk** (`/desk`, sign-in required): where the Research Desk officer, and later the team, discovers, verifies and manages publications.
+- **Public research view** (`/`, no sign-in): where researchers and visitors see confirmed publications and confirmed Fountain University output. Researchers don't need accounts.
 
 > **Principle:** discover broadly, match carefully, attribute correctly, report transparently.
 
@@ -95,20 +98,48 @@ npm run build && npm start
 
 The portal runs at `http://localhost:3000`. Set `FURIS_API_URL` in `.env.local` to the backend address. Only the Next.js server calls the API; the browser never does.
 
-| Page | Who sees it | What it does |
-|---|---|---|
-| Dashboard | Admins, faculty admins | Headline counts, confirmed FU output by year (chart plus table view), output by faculty, ORCID coverage, search-run health |
-| Review queue: Authorship | Everyone (scoped by role) | Candidates sorted by confidence, with the evidence behind each match; confirm or reject |
-| Review queue: Attribution | Research Office, Super Admin | Confirmed authorships with no attribution decision; FU output needs written evidence |
-| Publications | Everyone (scoped) | Filter by authorship status, attribution status and year |
-| Publication detail | Everyone (scoped) | Per-researcher evidence and decisions, authors, affiliation evidence, per-source citations, decision history with reviewer names |
-| Researchers | Admins, faculty admins | Registry search, add a researcher, CSV import, faculties and departments |
-| Researcher profile | Admins, faculty admins, the researcher | Identifiers (verify), employment history, name variants, discovered names to confirm, publications, latest discovery run, "Run discovery" |
-| Duplicates | Research Office, Super Admin | Side-by-side possible duplicates; merge or keep separate |
+**Research Desk** (`/desk`)
 
-Researchers sign in to "Is this your publication?", their own queue. They can confirm authorship and the names they publish under, but cannot decide attribution.
+| Page | What it does |
+|---|---|
+| Dashboard | Headline counts, confirmed FU output by year (chart plus table view), output by faculty, ORCID coverage, search-run health |
+| Review queue: Authorship | Candidates sorted by confidence, with the evidence behind each match. The officer confirms or rejects each one and notes how it was checked. |
+| Review queue: Attribution | Confirmed authorships still awaiting an attribution decision. Confirming FU output needs written evidence. |
+| Publications and publication detail | Evidence, authors, affiliation text as published, per-source citation counts, decision history |
+| Researchers and researcher profile | Registry, CSV import, identifiers, employment history, name variants, "Run discovery" |
+| Duplicates | Possible duplicates side by side; merge or keep separate |
+| Team (Super Administrator only) | Add team members, reset passwords, deactivate accounts |
+| Your account | Change your password |
 
-## Single sign-on
+**Public research view** (`/`)
+
+| Page | What it shows |
+|---|---|
+| Overview | Confirmed FU output count, by year and by faculty; recent output |
+| Publications | Confirmed FU output, or every confirmed researcher publication; search and filters |
+| Researchers | Researchers with at least one confirmed publication |
+| Researcher | Their confirmed publications, split into FU output and other work (for example, from before joining FU) |
+
+The public view never shows candidates, rejected matches, evidence, decision history, emails, staff numbers or employment dates. Turn it off with `FURIS_PUBLIC_VIEW=false`.
+
+## Signing in
+
+Only the Research Desk team signs in. There are two ways, chosen with `FURIS_AUTH_MODE`.
+
+**`password` (default for deployment).** Research Desk accounts with passwords; no external provider is needed.
+
+1. Set `FURIS_BOOTSTRAP_ADMIN_EMAIL` and `FURIS_BOOTSTRAP_ADMIN_PASSWORD` (12+ characters) on the API.
+2. The first sign-in with exactly those details creates that account as Super Administrator and asks for a new password.
+3. After that the account's own password applies, and the bootstrap settings can be removed.
+4. The Super Administrator adds team members on the **Team** page. FURIS shows each new member a temporary password once, and they choose their own at first sign-in.
+
+Passwords are stored as scrypt hashes. Five wrong attempts lock the account for 15 minutes. Changing or resetting a password ends that account's other sessions.
+
+**`oidc`.** University single sign-on, if you'd rather use Google accounts later (see below).
+
+`dev_header` (email only, no password) is for local development. The API refuses to start with it on Vercel or in production.
+
+### Single sign-on (optional)
 
 FURIS works with any OpenID Connect provider: Google Workspace, Microsoft Entra ID (Microsoft 365), Keycloak and others.
 
@@ -153,8 +184,9 @@ FURIS works with any OpenID Connect provider: Google Workspace, Microsoft Entra 
 
 **Safety checks**
 
-- The API refuses to start in production unless sign-in is `oidc` with a session secret of at least 32 characters.
-- The API refuses to start in `oidc` mode without an allowed email domain.
+- On Vercel or in production, the API refuses to start unless sign-in is `password` or `oidc`, with a session secret of at least 32 characters.
+- In `password` mode it refuses a bootstrap password shorter than 12 characters, or only one of the two bootstrap settings.
+- In `oidc` mode it refuses to start without an allowed email domain.
 - Dev sign-in (`FURIS_AUTH_MODE=dev_header`, email only, no password) exists for local development. In that mode the login page shows a warning.
 
 ## Deploying on Vercel and Neon
@@ -183,12 +215,7 @@ Browser ─► Portal (Vercel, frontend/) ─► API (Vercel, backend/) ─► N
 
 **3. Create the tables.** In the Actions tab, run **Database migrations** with *Run workflow*. Run it again whenever a change adds a migration.
 
-**4. Create the first administrator.** In Neon's SQL Editor, run:
-
-```sql
-INSERT INTO users (id, email, full_name, role, is_active, created_at, updated_at)
-VALUES (gen_random_uuid(), 'you@fuo.edu.ng', 'Your Name', 'super_admin', true, now(), now());
-```
+**4. First administrator.** Nothing to do in the database: the first sign-in with the bootstrap settings from step 5 creates the account.
 
 **5. API project on Vercel.** Import the repository with **Root Directory `backend`**.
 - Attach the Neon integration to **this** project. The API reads its `DATABASE_URL` variable, the pooled string.
@@ -197,27 +224,29 @@ VALUES (gen_random_uuid(), 'you@fuo.edu.ng', 'Your Name', 'super_admin', true, n
   | Variable | Value |
   |---|---|
   | `FURIS_ENVIRONMENT` | `production` |
-  | `FURIS_AUTH_MODE` | `oidc` |
-  | `FURIS_OIDC_ISSUER` | `https://accounts.google.com` |
-  | `FURIS_OIDC_CLIENT_ID` | your Google client ID |
-  | `FURIS_OIDC_ALLOWED_EMAIL_DOMAINS` | `["fuo.edu.ng"]` |
-  | `FURIS_OIDC_REQUIRED_CLAIMS` | `{"hd":"fuo.edu.ng"}` |
+  | `FURIS_AUTH_MODE` | `password` |
   | `FURIS_SESSION_SECRET` | a long random value |
+  | `FURIS_BOOTSTRAP_ADMIN_EMAIL` | the Research Desk officer's email |
+  | `FURIS_BOOTSTRAP_ADMIN_PASSWORD` | a temporary password of 12+ characters, replaced at first sign-in |
+  | `FURIS_BOOTSTRAP_ADMIN_NAME` | optional; the officer's name |
 
-- The API refuses to start in production without these settings.
+- Generate the session secret with `python -c "import secrets; print(secrets.token_urlsafe(48))"`, or any password manager's 48-character generator.
+- The API refuses to start on Vercel without a sign-in mode and a session secret.
 - On Vercel, "Run discovery" automatically queues the job instead of running it.
 
-**6. Portal project on Vercel.** Import the repository again with **Root Directory `frontend`**. Don't attach Neon here; the portal never talks to the database. Set these environment variables:
+**6. Web app project on Vercel.** Import the repository again with **Root Directory `frontend`**. Don't attach Neon here; the web app never talks to the database. Set these environment variables:
 
 | Variable | Value |
 |---|---|
 | `FURIS_API_URL` | the API project's address |
-| `APP_URL` | the portal's address |
-| `OIDC_ISSUER` | `https://accounts.google.com` |
-| `OIDC_CLIENT_ID` | your Google client ID |
-| `OIDC_CLIENT_SECRET` | your Google client secret |
+| `APP_URL` | the web app's address |
 
-**7. Google.** Add `https://<portal address>/auth/callback` to the OAuth client's authorized redirect URIs.
+Then:
+- The public research view is at `/`.
+- The officer signs in at `/desk`.
+- Once the officer has chosen their own password, remove the two `FURIS_BOOTSTRAP_ADMIN_*` variables from the API project.
+
+**7. Single sign-on, only if you switch to it later.** Add the `OIDC_*` variables to the web app and `https://<web app address>/auth/callback` to the provider's redirect URIs (see *Single sign-on*).
 
 **8. Discovery.** The **Discovery** workflow processes queued requests every hour and rediscovers everyone on Mondays. You can also start it by hand from the Actions tab.
 - Job logs are public, because this repository is public. The command-line tool keeps staff names out of them.
@@ -229,7 +258,7 @@ VALUES (gen_random_uuid(), 'you@fuo.edu.ng', 'Your Name', 'super_admin', true, n
 
 - [ ] **Set the Fountain University identifiers.** Put the verified OpenAlex institution ID and ROR ID in `FURIS_FU_OPENALEX_INSTITUTION_IDS` and `FURIS_FU_ROR_IDS`. Until then, FU affiliation is detected from affiliation text only.
 - [ ] **Set the contact address.** Set `FURIS_CONTACT_EMAIL` to a Research Office mailbox, and add `FURIS_OPENALEX_API_KEY` if you have one.
-- [ ] **Configure single sign-on.** Register FURIS with the university's identity provider and set `FURIS_ENVIRONMENT=production` and `FURIS_AUTH_MODE=oidc` (see *Single sign-on*).
+- [ ] **Set up sign-in.** Deploy with `FURIS_AUTH_MODE=password` and the bootstrap settings (see *Signing in*), then remove the bootstrap settings once the officer has chosen a password.
 - [ ] **Replace the draft attribution policy.** `discovery/attribution.py` encodes conservative `draft-0` rules. Replace them with the policy the Research Office approves (§9.5) and change `POLICY_VERSION`. Every assessment records the version that produced it.
 - [ ] **Check the data-source terms.** Review the ORCID public-API terms for the university's use (§21).
 - [ ] **Verify ORCIDs.** Imported ORCIDs are stored **unverified** and are not used for deterministic matching until an admin calls `POST /identifiers/{id}/verify`.

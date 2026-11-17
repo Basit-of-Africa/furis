@@ -71,11 +71,11 @@ export function ReviewItem({
     <article className="item">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="item-title"><Link href={`/publications/${p.id}`}>{p.title}</Link></div>
+          <div className="item-title"><Link href={`/desk/publications/${p.id}`}>{p.title}</Link></div>
           <PublicationMeta p={p} />
           {showResearcher && r && (
             <div className="item-meta">
-              Candidate researcher: <Link href={`/researchers/${r.id}`}>{researcherName(r)}</Link>
+              Candidate researcher: <Link href={`/desk/researchers/${r.id}`}>{researcherName(r)}</Link>
               {r.staff_number && <span className="muted"> · {r.staff_number}</span>}
             </div>
           )}

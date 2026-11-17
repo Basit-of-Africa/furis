@@ -62,7 +62,7 @@ export default async function ResearcherPage({ params }: { params: Promise<{ id:
     <>
       <div className="page-head">
         <div>
-          {!self && <div className="crumbs"><Link href="/researchers">Researchers</Link> /</div>}
+          {!self && <div className="crumbs"><Link href="/desk/researchers">Researchers</Link> /</div>}
           <h1>{researcherName(r)}</h1>
           <p>
             {[fac?.name, dep?.name, r.staff_number && `Staff no. ${r.staff_number}`, r.employment_status.replace("_", " ")]
@@ -81,7 +81,7 @@ export default async function ResearcherPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="tiles">
-        <Link className="tile" href="/queue"><div className="tile-label">Awaiting authorship review</div><div className="tile-value">{counts.candidate}</div></Link>
+        <Link className="tile" href="/desk/queue"><div className="tile-label">Awaiting authorship review</div><div className="tile-value">{counts.candidate}</div></Link>
         <div className="tile"><div className="tile-label">Confirmed publications</div><div className="tile-value">{counts.confirmed}</div></div>
         <div className="tile"><div className="tile-label">Confirmed FU output</div><div className="tile-value">{counts.fu}</div></div>
       </div>
@@ -122,7 +122,7 @@ export default async function ResearcherPage({ params }: { params: Promise<{ id:
                     {matches.map(({ match: m, publication: p, attribution: a }) => (
                       <tr key={m.id}>
                         <td style={{ minWidth: 260 }}>
-                          <Link href={`/publications/${p.id}`}>{p.title}</Link>
+                          <Link href={`/desk/publications/${p.id}`}>{p.title}</Link>
                           {p.journal_name && <div className="small muted">{p.journal_name}</div>}
                         </td>
                         <td>{p.publication_year ?? "—"}</td>

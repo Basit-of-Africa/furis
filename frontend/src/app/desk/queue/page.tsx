@@ -27,7 +27,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Search
   const more = items.length > PAGE;
   const shown = items.slice(0, PAGE);
   const link = (o: Record<string, string | number | undefined>) =>
-    `/queue${qs({ tab: tab === "attribution" ? tab : undefined, confidence: sp.confidence, ...o })}`;
+    `/desk/queue${qs({ tab: tab === "attribution" ? tab : undefined, confidence: sp.confidence, ...o })}`;
 
   return (
     <>
@@ -45,11 +45,11 @@ export default async function QueuePage({ searchParams }: { searchParams: Search
       {admin && (
         <div className="row" style={{ marginBottom: 14 }}>
           <Link aria-current={tab === "authorship" ? "page" : undefined}
-                className={`btn ${tab === "authorship" ? "btn-primary" : "btn-secondary"}`} href="/queue">
+                className={`btn ${tab === "authorship" ? "btn-primary" : "btn-secondary"}`} href="/desk/queue">
             Authorship
           </Link>
           <Link aria-current={tab === "attribution" ? "page" : undefined}
-                className={`btn ${tab === "attribution" ? "btn-primary" : "btn-secondary"}`} href="/queue?tab=attribution">
+                className={`btn ${tab === "attribution" ? "btn-primary" : "btn-secondary"}`} href="/desk/queue?tab=attribution">
             Attribution
           </Link>
         </div>

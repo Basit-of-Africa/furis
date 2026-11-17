@@ -16,7 +16,7 @@ export default async function PublicationsPage({ searchParams }: { searchParams:
   const filters = { match_status: sp.match_status, attribution_status: sp.attribution_status, year: sp.year };
   const pubs = await apiGet<Publication[]>(`/publications${qs({ ...filters, limit: PAGE + 1, offset: (page - 1) * PAGE })}`);
   const more = pubs.length > PAGE;
-  const link = (p: number) => `/publications${qs({ ...filters, page: p })}`;
+  const link = (p: number) => `/desk/publications${qs({ ...filters, page: p })}`;
 
   return (
     <>
@@ -54,7 +54,7 @@ export default async function PublicationsPage({ searchParams }: { searchParams:
           <input type="number" name="year" min={1900} max={2100} defaultValue={sp.year ?? ""} />
         </label>
         <button className="btn btn-secondary" type="submit">Filter</button>
-        {(sp.match_status || sp.attribution_status || sp.year) && <Link className="btn btn-secondary" href="/publications">Clear</Link>}
+        {(sp.match_status || sp.attribution_status || sp.year) && <Link className="btn btn-secondary" href="/desk/publications">Clear</Link>}
       </form>
 
       <section className="card">
@@ -64,7 +64,7 @@ export default async function PublicationsPage({ searchParams }: { searchParams:
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="stack">
             {pubs.slice(0, PAGE).map((p) => (
               <li key={p.id} style={{ borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
-                <div className="item-title"><Link href={`/publications/${p.id}`}>{p.title}</Link></div>
+                <div className="item-title"><Link href={`/desk/publications/${p.id}`}>{p.title}</Link></div>
                 <PublicationMeta p={p} />
               </li>
             ))}

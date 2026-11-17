@@ -14,7 +14,7 @@ type Search = Promise<{ q?: string; faculty_id?: string }>;
 export default async function ResearchersPage({ searchParams }: { searchParams: Search }) {
   const sp = await searchParams;
   const me = await getMe();
-  if (me.role === "researcher") redirect(me.researcher_id ? `/researchers/${me.researcher_id}` : "/queue");
+  if (me.role === "researcher") redirect(me.researcher_id ? `/desk/researchers/${me.researcher_id}` : "/desk/queue");
   const admin = isAdmin(me.role);
   const [researchers, faculties, departments] = await Promise.all([
     apiGet<Researcher[]>(`/researchers${qs({ q: sp.q, faculty_id: sp.faculty_id, limit: 500 })}`),
@@ -60,7 +60,7 @@ export default async function ResearchersPage({ searchParams }: { searchParams: 
               <tbody>
                 {researchers.map((r) => (
                   <tr key={r.id}>
-                    <td><Link href={`/researchers/${r.id}`}>{researcherName(r)}</Link></td>
+                    <td><Link href={`/desk/researchers/${r.id}`}>{researcherName(r)}</Link></td>
                     <td className="mono">{r.staff_number ?? "—"}</td>
                     <td>{r.faculty_id ? fac.get(r.faculty_id) ?? "—" : "—"}</td>
                     <td>{r.department_id ? dep.get(r.department_id) ?? "—" : "—"}</td>

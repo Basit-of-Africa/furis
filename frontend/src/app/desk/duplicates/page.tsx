@@ -16,7 +16,7 @@ function Side({ p, label }: { p: Publication | null; label: string }) {
       <div className="section-label">{label}</div>
       {p ? (
         <>
-          <div style={{ fontWeight: 600 }}><Link href={`/publications/${p.id}`}>{p.title}</Link></div>
+          <div style={{ fontWeight: 600 }}><Link href={`/desk/publications/${p.id}`}>{p.title}</Link></div>
           <PublicationMeta p={p} />
           {!p.doi && <div className="small muted">No DOI</div>}
         </>
@@ -27,7 +27,7 @@ function Side({ p, label }: { p: Publication | null; label: string }) {
 
 export default async function DuplicatesPage() {
   const me = await getMe();
-  if (!isAdmin(me.role)) redirect("/");
+  if (!isAdmin(me.role)) redirect("/desk");
   const dups = await apiGet<Duplicate[]>("/duplicates");
   return (
     <>

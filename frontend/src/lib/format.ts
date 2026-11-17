@@ -22,7 +22,7 @@ export const doiUrl = (doi: string | null) => (doi ? `https://doi.org/${encodeUR
 
 export const ROLE_LABEL: Record<Role, string> = {
   super_admin: "Super Administrator",
-  research_office: "Research Office",
+  research_office: "Research Desk officer",
   faculty_admin: "Faculty Administrator",
   researcher: "Researcher",
 };

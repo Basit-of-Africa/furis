@@ -9,8 +9,9 @@ local development, tests and the CLI sandbox. It is refused in production.
 from __future__ import annotations
 
 import uuid
+from datetime import timezone
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -26,18 +27,24 @@ def _unauthorized(msg: str) -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, msg, headers={"WWW-Authenticate": "Bearer"})
 
 
+# Reachable while a temporary password must still be replaced.
+PASSWORD_CHANGE_PATHS = {"/me", "/auth/password/change"}
+
+
 def current_user(
+    request: Request,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
     authorization: str | None = Header(default=None),
     x_user_email: str | None = Header(default=None),
 ) -> User:
+    issued_at = None
     if authorization:
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise _unauthorized("expected a Bearer token")
         try:
-            user_id = read_session(settings, token.strip())
+            user_id, issued_at = read_session(settings, token.strip())
         except AuthError as e:
             raise _unauthorized(e.public) from e
         user = db.get(User, user_id)
@@ -47,6 +54,14 @@ def current_user(
         raise _unauthorized("not signed in")
     if not user or not user.is_active:
         raise _unauthorized("account not found or deactivated")
+    # Changing or resetting a password ends every session issued before it.
+    changed = user.password_changed_at
+    if changed is not None and changed.tzinfo is None:
+        changed = changed.replace(tzinfo=timezone.utc)  # SQLite returns naive UTC values
+    if issued_at is not None and changed is not None and issued_at < int(changed.timestamp()):
+        raise _unauthorized("Your password was changed. Please sign in again.")
+    if user.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Choose a new password before continuing.")
     return user
 
 
