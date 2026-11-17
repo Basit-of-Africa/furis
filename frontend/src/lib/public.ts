@@ -2,16 +2,34 @@ import "server-only";
 
 import { API_BASE } from "./session";
 
-/** Reads the public, read-only API (no session). Returns null when the public view is switched off. */
+/** Reads the public, read-only API (no session). Returns null when the public view is switched off.
+ *  Failures are logged with their cause (visible in the hosting provider's logs), then thrown
+ *  so the page's error screen can show a friendly message. */
 export async function publicGet<T>(path: string): Promise<T | null> {
+  const url = `${API_BASE}/public${path}`;
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/public${path}`, { next: { revalidate: 120 } });
-  } catch {
-    throw new Error("The research data service is not reachable. Please try again shortly.");
+    res = await fetch(url, { next: { revalidate: 120 } });
+  } catch (e) {
+    console.error(`[FURIS] Cannot reach the API at ${API_BASE} (check FURIS_API_URL): ${(e as Error).message}`);
+    throw new Error("The research data service is not reachable.");
   }
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("The research data could not be loaded.");
+  const type = res.headers.get("content-type") ?? "";
+  if (res.status === 404 && type.includes("application/json")) return null; // public view switched off
+  if (!res.ok || !type.includes("application/json")) {
+    const hint =
+      res.status === 401 || res.status === 403
+        ? "the API refused the request; if it is on Vercel, Deployment Protection may be on"
+        : res.status === 404
+          ? "FURIS_API_URL may point to the wrong site (expected the FURIS API)"
+          : res.status >= 500
+            ? "the API had an error; check its logs (database connection, migrations)"
+            : !type.includes("application/json")
+              ? "the response was not JSON; FURIS_API_URL may point to the wrong site"
+              : "unexpected response";
+    console.error(`[FURIS] ${url} returned ${res.status}: ${hint}`);
+    throw new Error("The research data could not be loaded.");
+  }
   return (await res.json()) as T;
 }
 
